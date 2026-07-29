@@ -119,12 +119,30 @@ class EmailService:
         <html>
         <head>
         <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="x-apple-disable-message-reformatting">
+        <style>
+          body {{ margin: 0; padding: 0; background-color: #f5f7fb; font-family: Arial, sans-serif; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }}
+          table {{ border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; }}
+          .wrapper {{ width: 100% !important; background-color: #f5f7fb; padding: 20px 10px; }}
+          .container {{ width: 100% !important; max-width: 800px !important; margin: 0 auto; background-color: #ffffff; border-radius: 10px; border: 1px solid #e5e7eb; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,.08); }}
+          .table-responsive {{ width: 100% !important; overflow-x: auto !important; -webkit-overflow-scrolling: touch; margin-top: 15px; }}
+          @media only screen and (max-width: 600px) {{
+            .wrapper {{ padding: 10px 4px !important; }}
+            .header {{ padding: 18px 16px !important; }}
+            .header h2 {{ font-size: 18px !important; line-height: 1.3 !important; }}
+            .content {{ padding: 16px 12px !important; font-size: 13px !important; }}
+            .footer {{ padding: 16px 12px !important; font-size: 11.5px !important; }}
+            th, td {{ padding: 8px 6px !important; font-size: 12px !important; }}
+            .note {{ padding: 12px !important; font-size: 12px !important; }}
+          }}
+        </style>
         </head>
-        <body style="background-color:#f5f7fb;font-family:Arial,sans-serif;margin:0;padding:30px;">
-        <table width="100%" border="0" cellspacing="0" cellpadding="0" bgcolor="#f5f7fb" style="background-color:#f5f7fb;width:100%;">
+        <body style="background-color:#f5f7fb;font-family:Arial,sans-serif;margin:0;padding:0;">
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" bgcolor="#f5f7fb" class="wrapper" style="background-color:#f5f7fb;width:100%;padding:20px 10px;">
           <tr>
-            <td align="center" style="padding:20px 0;">
-              <table class="container" width="800" border="0" cellspacing="0" cellpadding="0" style="width:800px;max-width:800px;background-color:#ffffff;border-radius:10px;border:1px solid #e5e7eb;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08);border-collapse:separate;">
+            <td align="center">
+              <table class="container" width="100%" border="0" cellspacing="0" cellpadding="0" style="width:100%;max-width:800px;margin:0 auto;background-color:#ffffff;border-radius:10px;border:1px solid #e5e7eb;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08);border-collapse:separate;">
                 <tr>
                   <td class="header" bgcolor="#0b3d91" style="background-color:#0b3d91;padding:25px 35px;color:white;">
                     <h2 style="margin:0;font-family:Arial,sans-serif;font-size:22px;color:#ffffff;font-weight:bold;">{title}</h2>
@@ -137,20 +155,22 @@ class EmailService:
                       {intro}
                       These records require attention for closure.
                     </p>
-                    <table width="100%" border="0" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;margin-top:15px;">
-                      <thead>
-                        <tr bgcolor="#eef3fb" style="background-color:#eef3fb;">
-                          <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:1px solid #ececec;">Employee ID</th>
-                          <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:1px solid #ececec;">Name</th>
-                          <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:1px solid #ececec;">Department</th>
-                          <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:1px solid #ececec;">Pending Since</th>
-                          <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:1px solid #ececec;">{col_5}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {row_html}
-                      </tbody>
-                    </table>
+                    <div class="table-responsive" style="width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:15px;">
+                      <table width="100%" border="0" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;min-width:480px;">
+                        <thead>
+                          <tr bgcolor="#eef3fb" style="background-color:#eef3fb;">
+                            <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:1px solid #ececec;">Employee ID</th>
+                            <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:1px solid #ececec;">Name</th>
+                            <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:1px solid #ececec;">Department</th>
+                            <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:1px solid #ececec;">Pending Since</th>
+                            <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:1px solid #ececec;">{col_5}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {row_html}
+                        </tbody>
+                      </table>
+                    </div>
                     <div class="note" style="background-color:#fff7e6;padding:16px;margin-top:25px;border-left:4px solid #ffb020;font-family:Arial,sans-serif;font-size:13.5px;color:#666666;line-height:1.5;">
                       Please review the above cases and take the required actions at the earliest
                       to avoid further aging and ensure timely closure.
@@ -287,52 +307,69 @@ class EmailService:
         <html>
         <head>
         <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="x-apple-disable-message-reformatting">
+        <style>
+          body {{ margin: 0; padding: 0; background-color: #f8fafc; font-family: Arial, sans-serif; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }}
+          table {{ border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; }}
+          .wrapper {{ width: 100% !important; background-color: #f8fafc; padding: 20px 10px; }}
+          .container {{ width: 100% !important; max-width: 560px !important; margin: 0 auto; background-color: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0; border-top: 4px solid #0f766e; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }}
+          .table-responsive {{ width: 100% !important; overflow-x: auto !important; -webkit-overflow-scrolling: touch; margin: 20px 0; }}
+          @media only screen and (max-width: 600px) {{
+            .wrapper {{ padding: 10px 4px !important; }}
+            .content {{ padding: 20px 14px !important; font-size: 13px !important; }}
+            .footer {{ padding: 16px 14px !important; font-size: 11.5px !important; }}
+            .details-table td {{ padding: 8px 6px !important; font-size: 12px !important; }}
+          }}
+        </style>
         </head>
-        <body style="background-color:#f8fafc;font-family:Arial,sans-serif;margin:0;padding:30px 15px;">
-        <table width="100%" border="0" cellspacing="0" cellpadding="0" bgcolor="#f8fafc" style="background-color:#f8fafc;width:100%;">
+        <body style="background-color:#f8fafc;font-family:Arial,sans-serif;margin:0;padding:0;">
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" bgcolor="#f8fafc" class="wrapper" style="background-color:#f8fafc;width:100%;padding:20px 10px;">
           <tr>
-            <td align="center" style="padding:20px 0;">
-              <table class="container" width="560" border="0" cellspacing="0" cellpadding="0" style="width:560px;max-width:560px;background-color:#ffffff;border-radius:8px;border:1px solid #e2e8f0;border-top:4px solid #0f766e;overflow:hidden;box-shadow:0 4px 6px -1px rgba(0, 0, 0, 0.05);border-collapse:separate;">
+            <td align="center">
+              <table class="container" width="100%" border="0" cellspacing="0" cellpadding="0" style="width:100%;max-width:560px;margin:0 auto;background-color:#ffffff;border-radius:8px;border:1px solid #e2e8f0;border-top:4px solid #0f766e;overflow:hidden;box-shadow:0 4px 6px -1px rgba(0, 0, 0, 0.05);border-collapse:separate;">
                 <tr>
                   <td class="content" style="padding:32px 24px;color:#334155;font-family:Arial,sans-serif;font-size:14px;line-height:1.6;">
                     <h2 style="color:#0f766e;font-size:18px;font-weight:600;margin-top:0;margin-bottom:20px;border-bottom:1px solid #e2e8f0;padding-bottom:10px;font-family:Arial,sans-serif;">Full &amp; Final Settlement Details</h2>
                     <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#475569;font-family:Arial,sans-serif;">Dear {record.get('employee_name')},</p>
                     <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#475569;font-family:Arial,sans-serif;">Please find attached your Full &amp; Final (F&amp;F) settlement document along with the details of your exit clearance below:</p>
                 
-                    <table class="details-table" width="100%" border="0" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;margin:20px 0;">
-                      <tr>
-                        <td class="label" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;font-weight:600;color:#64748b;width:38%;font-family:Arial,sans-serif;font-size:13.5px;">Employee Name:</td>
-                        <td class="value" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;color:#0f172a;font-weight:500;font-family:Arial,sans-serif;font-size:13.5px;">{record.get('employee_name')}</td>
-                      </tr>
-                      <tr>
-                        <td class="label" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;font-weight:600;color:#64748b;width:38%;font-family:Arial,sans-serif;font-size:13.5px;">Person Number:</td>
-                        <td class="value" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;color:#0f172a;font-weight:500;font-family:Arial,sans-serif;font-size:13.5px;">{record.get('person_number')}</td>
-                      </tr>
-                      <tr>
-                        <td class="label" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;font-weight:600;color:#64748b;width:38%;font-family:Arial,sans-serif;font-size:13.5px;">Department:</td>
-                        <td class="value" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;color:#0f172a;font-weight:500;font-family:Arial,sans-serif;font-size:13.5px;">{record.get('department')}</td>
-                      </tr>
-                      <tr>
-                        <td class="label" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;font-weight:600;color:#64748b;width:38%;font-family:Arial,sans-serif;font-size:13.5px;">Resignation Date:</td>
-                        <td class="value" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;color:#0f172a;font-weight:500;font-family:Arial,sans-serif;font-size:13.5px;">{EmailService._fmt_date(record.get('resignation_date'))}</td>
-                      </tr>
-                      <tr>
-                        <td class="label" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;font-weight:600;color:#64748b;width:38%;font-family:Arial,sans-serif;font-size:13.5px;">Last Working Date:</td>
-                        <td class="value" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;color:#0f172a;font-weight:500;font-family:Arial,sans-serif;font-size:13.5px;">{EmailService._fmt_date(record.get('last_working_date'))}</td>
-                      </tr>
-                      <tr>
-                        <td class="label" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;font-weight:600;color:#64748b;width:38%;font-family:Arial,sans-serif;font-size:13.5px;">F&amp;F Status:</td>
-                        <td class="value" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;color:#0f172a;font-weight:500;font-family:Arial,sans-serif;font-size:13.5px;">{record.get('fnf_status')}</td>
-                      </tr>
-                      <tr>
-                        <td class="label" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;font-weight:600;color:#64748b;width:38%;font-family:Arial,sans-serif;font-size:13.5px;">Completed Date:</td>
-                        <td class="value" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;color:#0f172a;font-weight:500;font-family:Arial,sans-serif;font-size:13.5px;">{EmailService._fmt_date(record.get('fnf_completed_date'))}</td>
-                      </tr>
-                      <tr>
-                        <td class="label" style="padding:10px 12px;border-bottom:none;font-weight:600;color:#64748b;width:38%;font-family:Arial,sans-serif;font-size:13.5px;">Document Count:</td>
-                        <td class="value" style="padding:10px 12px;border-bottom:none;color:#0f172a;font-weight:500;font-family:Arial,sans-serif;font-size:13.5px;">ACTUAL_DOCUMENT_COUNT_PLACEHOLDER</td>
-                      </tr>
-                    </table>
+                    <div class="table-responsive" style="width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;margin:20px 0;">
+                      <table class="details-table" width="100%" border="0" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;">
+                        <tr>
+                          <td class="label" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;font-weight:600;color:#64748b;width:38%;font-family:Arial,sans-serif;font-size:13.5px;">Employee Name:</td>
+                          <td class="value" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;color:#0f172a;font-weight:500;font-family:Arial,sans-serif;font-size:13.5px;">{record.get('employee_name')}</td>
+                        </tr>
+                        <tr>
+                          <td class="label" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;font-weight:600;color:#64748b;width:38%;font-family:Arial,sans-serif;font-size:13.5px;">Person Number:</td>
+                          <td class="value" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;color:#0f172a;font-weight:500;font-family:Arial,sans-serif;font-size:13.5px;">{record.get('person_number')}</td>
+                        </tr>
+                        <tr>
+                          <td class="label" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;font-weight:600;color:#64748b;width:38%;font-family:Arial,sans-serif;font-size:13.5px;">Department:</td>
+                          <td class="value" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;color:#0f172a;font-weight:500;font-family:Arial,sans-serif;font-size:13.5px;">{record.get('department')}</td>
+                        </tr>
+                        <tr>
+                          <td class="label" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;font-weight:600;color:#64748b;width:38%;font-family:Arial,sans-serif;font-size:13.5px;">Resignation Date:</td>
+                          <td class="value" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;color:#0f172a;font-weight:500;font-family:Arial,sans-serif;font-size:13.5px;">{EmailService._fmt_date(record.get('resignation_date'))}</td>
+                        </tr>
+                        <tr>
+                          <td class="label" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;font-weight:600;color:#64748b;width:38%;font-family:Arial,sans-serif;font-size:13.5px;">Last Working Date:</td>
+                          <td class="value" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;color:#0f172a;font-weight:500;font-family:Arial,sans-serif;font-size:13.5px;">{EmailService._fmt_date(record.get('last_working_date'))}</td>
+                        </tr>
+                        <tr>
+                          <td class="label" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;font-weight:600;color:#64748b;width:38%;font-family:Arial,sans-serif;font-size:13.5px;">F&amp;F Status:</td>
+                          <td class="value" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;color:#0f172a;font-weight:500;font-family:Arial,sans-serif;font-size:13.5px;">{record.get('fnf_status')}</td>
+                        </tr>
+                        <tr>
+                          <td class="label" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;font-weight:600;color:#64748b;width:38%;font-family:Arial,sans-serif;font-size:13.5px;">Completed Date:</td>
+                          <td class="value" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;color:#0f172a;font-weight:500;font-family:Arial,sans-serif;font-size:13.5px;">{EmailService._fmt_date(record.get('fnf_completed_date'))}</td>
+                        </tr>
+                        <tr>
+                          <td class="label" style="padding:10px 12px;border-bottom:none;font-weight:600;color:#64748b;width:38%;font-family:Arial,sans-serif;font-size:13.5px;">Document Count:</td>
+                          <td class="value" style="padding:10px 12px;border-bottom:none;color:#0f172a;font-weight:500;font-family:Arial,sans-serif;font-size:13.5px;">ACTUAL_DOCUMENT_COUNT_PLACEHOLDER</td>
+                        </tr>
+                      </table>
+                    </div>
                 
                     <p style="margin:20px 0 0;font-size:14px;line-height:1.6;color:#475569;font-family:Arial,sans-serif;">
                       Please review the attached documents. If you notice any issues or if anything appears to be incorrect, kindly check and verify it, and let us know.
@@ -652,12 +689,28 @@ class EmailService:
         <html>
         <head>
         <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="x-apple-disable-message-reformatting">
+        <style>
+          body {{ margin: 0; padding: 0; background-color: #f5f7fb; font-family: Arial, sans-serif; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }}
+          table {{ border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; }}
+          .wrapper {{ width: 100% !important; background-color: #f5f7fb; padding: 20px 10px; }}
+          .container {{ width: 100% !important; max-width: 800px !important; margin: 0 auto; background-color: #ffffff; border-radius: 10px; border: 1px solid #e5e7eb; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,.08); }}
+          .table-responsive {{ width: 100% !important; overflow-x: auto !important; -webkit-overflow-scrolling: touch; margin-top: 15px; }}
+          @media only screen and (max-width: 600px) {{
+            .wrapper {{ padding: 10px 4px !important; }}
+            .header {{ padding: 18px 16px !important; }}
+            .header h2 {{ font-size: 18px !important; line-height: 1.3 !important; }}
+            .content {{ padding: 16px 12px !important; font-size: 13px !important; }}
+            th, td {{ padding: 8px 6px !important; font-size: 12px !important; }}
+          }}
+        </style>
         </head>
-        <body style="background-color:#f5f7fb;font-family:Arial,sans-serif;margin:0;padding:30px;">
-        <table width="100%" border="0" cellspacing="0" cellpadding="0" bgcolor="#f5f7fb" style="background-color:#f5f7fb;width:100%;">
+        <body style="background-color:#f5f7fb;font-family:Arial,sans-serif;margin:0;padding:0;">
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" bgcolor="#f5f7fb" class="wrapper" style="background-color:#f5f7fb;width:100%;padding:20px 10px;">
           <tr>
-            <td align="center" style="padding:20px 0;">
-              <table class="container" width="800" border="0" cellspacing="0" cellpadding="0" style="width:800px;max-width:800px;background-color:#ffffff;border-radius:10px;border:1px solid #e5e7eb;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08);border-collapse:separate;">
+            <td align="center">
+              <table class="container" width="100%" border="0" cellspacing="0" cellpadding="0" style="width:100%;max-width:800px;margin:0 auto;background-color:#ffffff;border-radius:10px;border:1px solid #e5e7eb;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08);border-collapse:separate;">
                 <tr>
                   <td class="header" bgcolor="#0b3d91" style="background-color:#0b3d91;color:white;padding:25px 35px;">
                     <h2 style="margin:0;font-family:Arial,sans-serif;font-size:22px;color:#ffffff;font-weight:bold;">{header_title}</h2>
@@ -668,19 +721,21 @@ class EmailService:
                     <p style="margin:0 0 16px 0;">{greeting}</p>
                     {warning_html}
                     {intro_paragraph}
-                    <table width="100%" border="0" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;margin-top:15px;">
-                      <thead>
-                        <tr bgcolor="#eef3fb" style="background-color:#eef3fb;">
-                          <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:1px solid #ececec;">Employee ID</th>
-                          <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:1px solid #ececec;">Name</th>
-                          <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:1px solid #ececec;">Department</th>
-                          <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:1px solid #ececec;">Last Working Date</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {row_html}
-                      </tbody>
-                    </table>
+                    <div class="table-responsive" style="width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:15px;">
+                      <table width="100%" border="0" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;min-width:420px;">
+                        <thead>
+                          <tr bgcolor="#eef3fb" style="background-color:#eef3fb;">
+                            <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:1px solid #ececec;">Employee ID</th>
+                            <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:1px solid #ececec;">Name</th>
+                            <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:1px solid #ececec;">Department</th>
+                            <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:1px solid #ececec;">Last Working Date</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {row_html}
+                        </tbody>
+                      </table>
+                    </div>
                     <p style="margin:20px 0 0 0;">Please review these records and take the necessary actions.</p>
                   </td>
                 </tr>
@@ -752,12 +807,28 @@ class EmailService:
         <html>
         <head>
         <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="x-apple-disable-message-reformatting">
+        <style>
+          body {{ margin: 0; padding: 0; background-color: #f5f7fb; font-family: Arial, sans-serif; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }}
+          table {{ border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; }}
+          .wrapper {{ width: 100% !important; background-color: #f5f7fb; padding: 20px 10px; }}
+          .container {{ width: 100% !important; max-width: 800px !important; margin: 0 auto; background-color: #ffffff; border-radius: 10px; border: 1px solid #e5e7eb; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,.08); }}
+          .table-responsive {{ width: 100% !important; overflow-x: auto !important; -webkit-overflow-scrolling: touch; margin-top: 15px; }}
+          @media only screen and (max-width: 600px) {{
+            .wrapper {{ padding: 10px 4px !important; }}
+            .header {{ padding: 18px 16px !important; }}
+            .header h2 {{ font-size: 18px !important; line-height: 1.3 !important; }}
+            .content {{ padding: 16px 12px !important; font-size: 13px !important; }}
+            th, td {{ padding: 8px 6px !important; font-size: 12px !important; }}
+          }}
+        </style>
         </head>
-        <body style="background-color:#f5f7fb;font-family:Arial,sans-serif;margin:0;padding:30px;">
-        <table width="100%" border="0" cellspacing="0" cellpadding="0" bgcolor="#f5f7fb" style="background-color:#f5f7fb;width:100%;">
+        <body style="background-color:#f5f7fb;font-family:Arial,sans-serif;margin:0;padding:0;">
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" bgcolor="#f5f7fb" class="wrapper" style="background-color:#f5f7fb;width:100%;padding:20px 10px;">
           <tr>
-            <td align="center" style="padding:20px 0;">
-              <table class="container" width="800" border="0" cellspacing="0" cellpadding="0" style="width:800px;max-width:800px;background-color:#ffffff;border-radius:10px;border:1px solid #e5e7eb;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08);border-collapse:separate;">
+            <td align="center">
+              <table class="container" width="100%" border="0" cellspacing="0" cellpadding="0" style="width:100%;max-width:800px;margin:0 auto;background-color:#ffffff;border-radius:10px;border:1px solid #e5e7eb;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08);border-collapse:separate;">
                 <tr>
                   <td class="header" bgcolor="#d9534f" style="background-color:#d9534f;color:white;padding:25px 35px;">
                     <h2 style="margin:0;font-family:Arial,sans-serif;font-size:22px;font-weight:bold;color:#ffffff;">Conflicting RM Configurations - Redirected Approvals Report</h2>
@@ -769,20 +840,22 @@ class EmailService:
                     <p style="color: #d9534f; font-weight: bold; background-color: #fdf7f7; border: 1px solid #d9534f; padding: 12px; border-radius: 5px; margin-bottom: 15px; margin-top:0;">
                       Warning: The following pending RM approvals have been redirected to HR because their Reporting Managers have multiple conflicting email configurations in the system. Please resolve these duplicates in the <b>rm_email_configuration</b> database table.
                     </p>
-                    <table width="100%" border="0" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;margin-top:15px;">
-                      <thead>
-                        <tr bgcolor="#fdf7f7" style="background-color:#fdf7f7;">
-                          <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:2px solid #d9534f;">Reporting Manager</th>
-                          <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:2px solid #d9534f;">Employee ID</th>
-                          <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:2px solid #d9534f;">Name</th>
-                          <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:2px solid #d9534f;">Department</th>
-                          <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:2px solid #d9534f;">Last Working Date</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {row_html}
-                      </tbody>
-                    </table>
+                    <div class="table-responsive" style="width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:15px;">
+                      <table width="100%" border="0" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;min-width:480px;">
+                        <thead>
+                          <tr bgcolor="#fdf7f7" style="background-color:#fdf7f7;">
+                            <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:2px solid #d9534f;">Reporting Manager</th>
+                            <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:2px solid #d9534f;">Employee ID</th>
+                            <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:2px solid #d9534f;">Name</th>
+                            <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:2px solid #d9534f;">Department</th>
+                            <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:2px solid #d9534f;">Last Working Date</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {row_html}
+                        </tbody>
+                      </table>
+                    </div>
                     <p style="margin:20px 0 0 0;">Please review these records and take the necessary actions.</p>
                   </td>
                 </tr>
@@ -1328,9 +1401,11 @@ class EmailService:
             <html>
             <head>
               <meta charset="utf-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <meta name="x-apple-disable-message-reformatting">
               <style>
-                body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f6f9; margin: 0; padding: 20px; }}
-                .card {{ max-width: 540px; margin: 0 auto; background: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }}
+                body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f6f9; margin: 0; padding: 15px 10px; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }}
+                .card {{ max-width: 540px; width: 100%; margin: 0 auto; background: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }}
                 .header {{ background-color: #003b70; color: #ffffff; padding: 24px; text-align: center; }}
                 .header h1 {{ margin: 0; font-size: 20px; font-weight: 600; letter-spacing: 0.5px; }}
                 .body {{ padding: 32px 24px; color: #334155; line-height: 1.6; font-size: 14px; }}
@@ -1338,6 +1413,12 @@ class EmailService:
                 .btn {{ display: inline-block; background-color: #003b70; color: #ffffff !important; padding: 12px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
                 .footer {{ background-color: #f8fafc; padding: 16px 24px; border-top: 1px solid #f1f5f9; text-align: center; font-size: 12px; color: #64748b; }}
                 .warning {{ background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 12px; font-size: 13px; color: #92400e; border-radius: 0 4px 4px 0; margin-top: 20px; }}
+                @media only screen and (max-width: 600px) {{
+                  body {{ padding: 10px 5px !important; }}
+                  .header {{ padding: 18px 16px !important; }}
+                  .body {{ padding: 20px 16px !important; font-size: 13px !important; }}
+                  .btn {{ padding: 10px 20px !important; font-size: 13px !important; }}
+                }}
               </style>
             </head>
             <body>
