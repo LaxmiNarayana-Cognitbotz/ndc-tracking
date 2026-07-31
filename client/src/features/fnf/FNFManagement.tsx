@@ -366,8 +366,12 @@ export function FNFManagement() {
                       </button>
                       <button
                         onClick={() => { setMailRecord(record); setMailEmailTo(""); setMailDialogOpen(true); }}
-                        className="p-2 rounded-[4px] bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-                        title="Send email"
+                        disabled={record.fnfDocumentCount === 0}
+                        className={`p-2 rounded-[4px] transition-colors ${record.fnfDocumentCount === 0
+                            ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                            : 'bg-primary text-primary-foreground hover:bg-primary/90'
+                          }`}
+                        title={record.fnfDocumentCount === 0 ? "No document found to send" : "Send email"}
                       >
                         <Mail className="w-4 h-4" />
                       </button>

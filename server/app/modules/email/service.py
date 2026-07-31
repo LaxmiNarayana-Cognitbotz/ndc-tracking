@@ -564,6 +564,11 @@ class EmailService:
                     fnf_doc_name = possible_file
                     break
 
+            # Block sending if no document is found in DB (SharePoint) or locally
+            has_doc = record.fnf_document_count and record.fnf_document_count > 0
+            if not has_doc and not fnf_doc_name:
+                return {"success": False, "message": "No F&F document found for this employee. Email not triggered.", "status_code": 400}
+
             # Base record fields
             record_dict = {
                 "person_number": str(record.person_number),
