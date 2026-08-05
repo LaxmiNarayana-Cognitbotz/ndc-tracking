@@ -79,7 +79,7 @@ const router = createBrowserRouter(
       ],
     },
   ],
-  { basename: "/ndc" }
+  { basename: import.meta.env.BASE_URL }
 );
 
 export default function App() {
