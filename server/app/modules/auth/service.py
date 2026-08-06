@@ -37,8 +37,8 @@ class AuthService:
             smtp_password = os.getenv("SMTP_PASSWORD", "")
             smtp_from = os.getenv("SMTP_FROM", smtp_user)
 
-            if not smtp_user:
-                logger.error("SMTP user not configured in env")
+            if not smtp_from:
+                logger.error("SMTP_FROM not configured in env")
                 return False
 
             msg = MIMEMultipart("alternative")

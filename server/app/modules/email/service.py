@@ -229,8 +229,8 @@ class EmailService:
             if not recipient:
                 recipient = os.getenv("EMAIL_RECIPIENT", "")
 
-            if not smtp_user:
-                msg = "SMTP user not configured"
+            if not smtp_from:
+                msg = "SMTP_FROM not configured"
                 logger.error(msg)
                 return {"success": False, "message": msg}
 
@@ -297,8 +297,8 @@ class EmailService:
             smtp_password = os.getenv("SMTP_PASSWORD", "")
             smtp_from = os.getenv("SMTP_FROM", smtp_user)
 
-            if not smtp_user:
-                msg = "SMTP user not configured"
+            if not smtp_from:
+                msg = "SMTP_FROM not configured"
                 logger.error(msg)
                 return {"success": False, "message": msg}
 
@@ -639,8 +639,8 @@ class EmailService:
             smtp_password = os.getenv("SMTP_PASSWORD", "")
             smtp_from = os.getenv("SMTP_FROM", smtp_user)
 
-            if not smtp_user:
-                logger.error("SMTP_USER not configured in env")
+            if not smtp_from:
+                logger.error("SMTP_FROM not configured in env")
                 return False
 
             if not records:
