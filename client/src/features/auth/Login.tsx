@@ -1,7 +1,7 @@
-import { useState, FormEvent } from "react";
+import { useState, useEffect, FormEvent } from "react";
 import { Navigate, useNavigate } from "react-router";
 import { useAuth } from "../../context/AuthContext";
-import { Eye, EyeOff, Loader2, Mail, Lock, CheckCircle2 } from "lucide-react";
+import { Eye, EyeOff, Loader2, Mail, Lock, CheckCircle2, ArrowLeft, KeyRound } from "lucide-react";
 import imgLogo from "../../assets/images/image.png";
 import api from "../../lib/axios";
 import { toast } from "sonner";
@@ -13,7 +13,7 @@ import {
 } from "../../components/ui/dialog";
 
 export function Login() {
-  const { user, loginWithPassword } = useAuth();
+  const { user, loginWithPassword, verifyOtp, resendOtp } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -21,12 +21,29 @@ export function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // OTP Verification state
+  const [step, setStep] = useState<"credentials" | "otp">("credentials");
+  const [otpCode, setOtpCode] = useState("");
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+  const [isResendingOtp, setIsResendingOtp] = useState(false);
+  const [resendTimer, setResendTimer] = useState(0);
+
   // Forgot password modal states
   const [isForgotOpen, setIsForgotOpen] = useState(false);
   const [forgotEmail, setForgotEmail] = useState("");
   const [isForgotSubmitting, setIsForgotSubmitting] = useState(false);
   const [forgotSuccess, setForgotSuccess] = useState(false);
   const [forgotError, setForgotError] = useState("");
+
+  useEffect(() => {
+    let interval: any;
+    if (resendTimer > 0) {
+      interval = setInterval(() => {
+        setResendTimer((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [resendTimer]);
 
   // If already authenticated, redirect to dashboard
   if (user && user.status === "approved") {
@@ -38,10 +55,6 @@ export function Login() {
     setError(null);
 
     const cleanEmail = email.trim();
-    // if (!cleanEmail.endsWith("@adani.com")) {
-    //   setError("Only @adani.com email addresses are allowed.");
-    //   return;
-    // }
 
     if (!password) {
       setError("Password is required.");
@@ -50,14 +63,58 @@ export function Login() {
 
     setIsLoading(true);
     try {
-      await loginWithPassword(cleanEmail, password);
-      // Navigate to dashboard after successful login
-      navigate("/ndc-reporting/overview", { replace: true });
+      const res = await loginWithPassword(cleanEmail, password);
+      if (res?.requires_otp) {
+        setStep("otp");
+        setResendTimer(60);
+        setOtpCode("");
+        toast.success("Verification code sent to your email!");
+      } else {
+        navigate("/ndc-reporting/overview", { replace: true });
+      }
     } catch (err: any) {
       console.error("Login failed:", err);
       setError(err.response?.data?.message || err.response?.data?.detail || "Invalid email or password.");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleVerifyOtpSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    const cleanOtp = otpCode.trim();
+    if (cleanOtp.length !== 6) {
+      setError("Please enter a valid 6-digit OTP.");
+      return;
+    }
+
+    setIsVerifyingOtp(true);
+    try {
+      await verifyOtp(email.trim(), cleanOtp);
+      toast.success("Login successful!");
+      navigate("/ndc-reporting/overview", { replace: true });
+    } catch (err: any) {
+      console.error("OTP Verification failed:", err);
+      setError(err.response?.data?.message || err.response?.data?.detail || "Invalid OTP code.");
+    } finally {
+      setIsVerifyingOtp(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (resendTimer > 0 || isResendingOtp) return;
+    setError(null);
+    setIsResendingOtp(true);
+    try {
+      await resendOtp(email.trim());
+      setResendTimer(60);
+      toast.success("A new verification code has been sent to your email.");
+    } catch (err: any) {
+      setError(err.response?.data?.message || err.response?.data?.detail || "Failed to resend OTP.");
+    } finally {
+      setIsResendingOtp(false);
     }
   };
 
@@ -179,93 +236,180 @@ export function Login() {
 
         {/* Centered Login Card */}
         <div className="my-auto mx-auto w-full max-w-[360px] space-y-6">
-          <div className="space-y-1.5">
-            <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">
-              Sign In
-            </h2>
-            <p className="text-xs text-slate-500 font-medium">
-              Welcome back! Please enter your @adani.com credentials.
-            </p>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
-              <div className="p-3 text-[11px] font-semibold text-rose-600 bg-rose-50 rounded-lg border border-rose-100">
-                {error}
+          {step === "credentials" ? (
+            <>
+              <div className="space-y-1.5">
+                <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">
+                  Sign In
+                </h2>
+                <p className="text-xs text-slate-500 font-medium">
+                  Welcome back! Please enter your @adani.com credentials.
+                </p>
               </div>
-            )}
 
-            <div className="space-y-1">
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                Email Address
-              </label>
-              <div className="relative">
-                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
-                  <Mail size={16} />
-                </span>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@adani.com"
-                  className="w-full h-10 pl-10 pr-4 text-sm bg-slate-50/50 text-slate-800 rounded-lg border border-slate-200 focus:outline-none focus:border-[#003b70] focus:ring-1 focus:ring-[#003b70] focus:bg-white transition-all placeholder-slate-400 font-medium"
-                  required
-                />
-              </div>
-            </div>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                {error && (
+                  <div className="p-3 text-[11px] font-semibold text-rose-600 bg-rose-50 rounded-lg border border-rose-100">
+                    {error}
+                  </div>
+                )}
 
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                  Password
-                </label>
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    Email Address
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
+                      <Mail size={16} />
+                    </span>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="name@adani.com"
+                      className="w-full h-10 pl-10 pr-4 text-sm bg-slate-50/50 text-slate-800 rounded-lg border border-slate-200 focus:outline-none focus:border-[#003b70] focus:ring-1 focus:ring-[#003b70] focus:bg-white transition-all placeholder-slate-400 font-medium"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                      Password
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setForgotEmail(email);
+                        setForgotError("");
+                        setForgotSuccess(false);
+                        setIsForgotOpen(true);
+                      }}
+                      className="text-[11px] font-semibold text-[#003b70] hover:underline cursor-pointer"
+                    >
+                      Forgot Password?
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
+                      <Lock size={16} />
+                    </span>
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full h-10 pl-10 pr-10 text-sm bg-slate-50/50 text-slate-800 rounded-lg border border-slate-200 focus:outline-none focus:border-[#003b70] focus:ring-1 focus:ring-[#003b70] focus:bg-white transition-all placeholder-slate-400 font-medium"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none cursor-pointer"
+                    >
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full h-10 mt-2 flex items-center justify-center text-sm font-bold text-white rounded-lg bg-[#003b70] hover:bg-[#002f5a] shadow-sm hover:shadow transition-all cursor-pointer disabled:opacity-75 disabled:pointer-events-none"
+                >
+                  {isLoading ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    "Sign In"
+                  )}
+                </button>
+              </form>
+            </>
+          ) : (
+            <>
+              <div className="space-y-1.5">
                 <button
                   type="button"
                   onClick={() => {
-                    setForgotEmail(email);
-                    setForgotError("");
-                    setForgotSuccess(false);
-                    setIsForgotOpen(true);
+                    setStep("credentials");
+                    setError(null);
+                    setOtpCode("");
                   }}
-                  className="text-[11px] font-semibold text-[#003b70] hover:underline cursor-pointer"
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-[#003b70] mb-2 transition-colors cursor-pointer"
                 >
-                  Forgot Password?
+                  <ArrowLeft size={14} />
+                  Back to Sign In
                 </button>
+                <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">
+                  Enter Verification Code
+                </h2>
+                <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                  We've sent a 6-digit OTP to <strong className="text-slate-800">{email}</strong>.
+                </p>
               </div>
-              <div className="relative">
-                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
-                  <Lock size={16} />
-                </span>
-                <input
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full h-10 pl-10 pr-10 text-sm bg-slate-50/50 text-slate-800 rounded-lg border border-slate-200 focus:outline-none focus:border-[#003b70] focus:ring-1 focus:ring-[#003b70] focus:bg-white transition-all placeholder-slate-400 font-medium"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none cursor-pointer"
-                >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
-            </div>
 
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full h-10 mt-2 flex items-center justify-center text-sm font-bold text-white rounded-lg bg-[#003b70] hover:bg-[#002f5a] shadow-sm hover:shadow transition-all cursor-pointer disabled:opacity-75 disabled:pointer-events-none"
-            >
-              {isLoading ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                "Sign In"
-              )}
-            </button>
-          </form>
+              <form onSubmit={handleVerifyOtpSubmit} className="space-y-4">
+                {error && (
+                  <div className="p-3 text-[11px] font-semibold text-rose-600 bg-rose-50 rounded-lg border border-rose-100">
+                    {error}
+                  </div>
+                )}
+
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    One-Time Password (OTP)
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
+                      <KeyRound size={16} />
+                    </span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      maxLength={6}
+                      value={otpCode}
+                      onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
+                      placeholder="123456"
+                      className="w-full h-11 pl-10 pr-4 text-center tracking-[0.35em] text-lg font-bold font-mono bg-slate-50/50 text-slate-800 rounded-lg border border-slate-200 focus:outline-none focus:border-[#003b70] focus:ring-1 focus:ring-[#003b70] focus:bg-white transition-all placeholder-slate-300"
+                      required
+                      autoFocus
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isVerifyingOtp || otpCode.trim().length !== 6}
+                  className="w-full h-10 mt-2 flex items-center justify-center text-sm font-bold text-white rounded-lg bg-[#003b70] hover:bg-[#002f5a] shadow-sm hover:shadow transition-all cursor-pointer disabled:opacity-50 disabled:pointer-events-none"
+                >
+                  {isVerifyingOtp ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    "Verify & Sign In"
+                  )}
+                </button>
+
+                <div className="pt-2 text-center text-xs text-slate-500">
+                  Didn't receive code?{" "}
+                  {resendTimer > 0 ? (
+                    <span className="font-semibold text-slate-700">Resend in {resendTimer}s</span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleResendOtp}
+                      disabled={isResendingOtp}
+                      className="font-bold text-[#003b70] hover:underline cursor-pointer inline-flex items-center gap-1 disabled:opacity-50"
+                    >
+                      {isResendingOtp && <Loader2 className="w-3 h-3 animate-spin" />}
+                      Resend OTP
+                    </button>
+                  )}
+                </div>
+              </form>
+            </>
+          )}
 
           {/* Footer info */}
           <div className="pt-4 border-t border-slate-100 text-left text-[10px] text-slate-400 font-semibold tracking-wide uppercase">

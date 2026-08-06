@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.jwt_bearer import get_current_user
-from app.dto.auth import ForgotPasswordRequest, LoginRequest, ResetPasswordRequest
+from app.dto.auth import ForgotPasswordRequest, LoginRequest, ResendOTPRequest, ResetPasswordRequest, VerifyOTPRequest
 from app.modules.auth.service import AuthService
 from config.database import get_db
 
@@ -20,6 +20,26 @@ router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 async def login_post(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
     try:
         return await AuthService.authenticate_user(payload.email, payload.password, db)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"An error occurred: {str(e)}")
+
+
+@router.post("/verify-otp")
+async def verify_otp_route(payload: VerifyOTPRequest, db: AsyncSession = Depends(get_db)):
+    try:
+        return await AuthService.verify_otp(payload.email, payload.otp_code, db)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"An error occurred: {str(e)}")
+
+
+@router.post("/resend-otp")
+async def resend_otp_route(payload: ResendOTPRequest, db: AsyncSession = Depends(get_db)):
+    try:
+        return await AuthService.resend_otp(payload.email, db)
     except HTTPException:
         raise
     except Exception as e:

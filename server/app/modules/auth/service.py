@@ -150,15 +150,9 @@ class AuthService:
 
     @staticmethod
     async def authenticate_user(email: str, password: str, db: AsyncSession) -> dict:
-        """Authenticate user with email/password and return session data."""
+        """Authenticate user with email/password and send OTP to email."""
         try:
             email = email.strip().lower()
-
-            # if not email.endswith("@adani.com"):
-            #     raise HTTPException(
-            #         status_code=status.HTTP_400_BAD_REQUEST,
-            #         detail="Only @adani.com email addresses are allowed."
-            #     )
 
             stmt = select(NdcUserAccess).where(NdcUserAccess.email == email)
             res = await db.execute(stmt)
@@ -176,7 +170,79 @@ class AuthService:
             if not user_access.hashed_password or not verify_password(password, user_access.hashed_password):
                 raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password.")
 
-            # Generate token
+            # Generate 6-digit OTP
+            otp_code = f"{secrets.randbelow(900000) + 100000}"
+            user_access.otp_code = otp_code
+            user_access.otp_expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(minutes=10)
+            await db.commit()
+
+            # Send OTP email
+            body_html = f"""
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+                <h2 style="color: #003b70; margin-bottom: 16px;">NDC Tracking System - Login Verification</h2>
+                <p>Hello <strong>{user_access.name or user_access.email}</strong>,</p>
+                <p>Your one-time verification code (OTP) for login is:</p>
+                <div style="background-color: #f0f4f8; padding: 16px; text-align: center; font-size: 28px; font-weight: bold; letter-spacing: 6px; color: #003b70; border-radius: 6px; margin: 20px 0;">
+                    {otp_code}
+                </div>
+                <p style="color: #666; font-size: 14px;">This code will expire in 10 minutes. If you did not attempt to log in, please ignore this email.</p>
+            </div>
+            """
+            await AuthService.send_auth_email(user_access.email, "NDC Tracking - Login OTP Code", body_html)
+
+            return {
+                "requires_otp": True,
+                "email": user_access.email,
+                "message": "OTP verification code sent to your email."
+            }
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f'Error in authenticate_user: {e}', exc_info=True)
+            raise HTTPException(status_code=500, detail='An internal server error occurred.')
+
+    @staticmethod
+    async def verify_otp(email: str, otp_code: str, db: AsyncSession) -> dict:
+        """Verify the OTP code sent to user email and issue session token."""
+        try:
+            email = email.strip().lower()
+            otp_code = otp_code.strip()
+
+            stmt = select(NdcUserAccess).where(NdcUserAccess.email == email)
+            res = await db.execute(stmt)
+            user_access = res.scalar_one_or_none()
+
+            if not user_access:
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or request.")
+
+            if user_access.status == "pending":
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Your access request is pending approval.")
+            if user_access.status == "rejected":
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied. Your request has been rejected.")
+
+            if not user_access.otp_code or not user_access.otp_expires_at:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No OTP code requested or OTP has expired. Please log in again.")
+
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
+            otp_exp = user_access.otp_expires_at
+            if otp_exp.tzinfo is not None:
+                otp_exp = otp_exp.astimezone(timezone.utc).replace(tzinfo=None)
+
+            if now > otp_exp:
+                user_access.otp_code = None
+                user_access.otp_expires_at = None
+                await db.commit()
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OTP has expired. Please request a new OTP.")
+
+            if user_access.otp_code != otp_code:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid OTP code. Please check and try again.")
+
+            # Clear OTP fields on successful verification
+            user_access.otp_code = None
+            user_access.otp_expires_at = None
+            await db.commit()
+
+            # Generate session token
             session_token = create_access_token({
                 "sub": user_access.email,
                 "role": user_access.role,
@@ -193,9 +259,49 @@ class AuthService:
         except HTTPException:
             raise
         except Exception as e:
-            import logging; logging.error(f'Error in authenticate_user: {e}', exc_info=True)
-            import fastapi
-            raise fastapi.HTTPException(status_code=500, detail='An internal server error occurred.')
+            logger.error(f'Error in verify_otp: {e}', exc_info=True)
+            raise HTTPException(status_code=500, detail='An internal server error occurred.')
+
+    @staticmethod
+    async def resend_otp(email: str, db: AsyncSession) -> dict:
+        """Resend OTP code to the specified email."""
+        try:
+            email = email.strip().lower()
+
+            stmt = select(NdcUserAccess).where(NdcUserAccess.email == email)
+            res = await db.execute(stmt)
+            user_access = res.scalar_one_or_none()
+
+            if not user_access:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+
+            if user_access.status == "pending" or user_access.status == "rejected":
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
+
+            otp_code = f"{secrets.randbelow(900000) + 100000}"
+            user_access.otp_code = otp_code
+            user_access.otp_expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(minutes=10)
+            await db.commit()
+
+            body_html = f"""
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+                <h2 style="color: #003b70; margin-bottom: 16px;">NDC Tracking System - Login Verification</h2>
+                <p>Hello <strong>{user_access.name or user_access.email}</strong>,</p>
+                <p>Your new one-time verification code (OTP) for login is:</p>
+                <div style="background-color: #f0f4f8; padding: 16px; text-align: center; font-size: 28px; font-weight: bold; letter-spacing: 6px; color: #003b70; border-radius: 6px; margin: 20px 0;">
+                    {otp_code}
+                </div>
+                <p style="color: #666; font-size: 14px;">This code will expire in 10 minutes. If you did not request this OTP, please ignore this email.</p>
+            </div>
+            """
+            await AuthService.send_auth_email(user_access.email, "NDC Tracking - New Login OTP Code", body_html)
+
+            return {"message": "A new OTP has been sent to your email."}
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f'Error in resend_otp: {e}', exc_info=True)
+            raise HTTPException(status_code=500, detail='An internal server error occurred.')
 
 
     @staticmethod
