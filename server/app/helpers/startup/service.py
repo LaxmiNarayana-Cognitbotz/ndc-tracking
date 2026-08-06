@@ -35,6 +35,8 @@ class StartupService:
         await _add_column("ALTER TABLE ndc_user_access ADD COLUMN IF NOT EXISTS hashed_password VARCHAR(255)")
         await _add_column("ALTER TABLE ndc_user_access ADD COLUMN IF NOT EXISTS reset_token VARCHAR(255)")
         await _add_column("ALTER TABLE ndc_user_access ADD COLUMN IF NOT EXISTS reset_token_expires_at TIMESTAMP")
+        await _add_column("ALTER TABLE ndc_user_access ADD COLUMN IF NOT EXISTS otp_code VARCHAR(10)")
+        await _add_column("ALTER TABLE ndc_user_access ADD COLUMN IF NOT EXISTS otp_expires_at TIMESTAMP")
 
         # ── ndc_records: F&F tracking columns ───────────────────────────────────
         await _add_column("ALTER TABLE ndc_records ADD COLUMN IF NOT EXISTS is_fnf_completed BOOLEAN NOT NULL DEFAULT false")

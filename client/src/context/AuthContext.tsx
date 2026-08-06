@@ -15,7 +15,9 @@ interface AuthContextType {
   isAdmin: boolean;
   isLoading: boolean;
   login: () => Promise<void>;
-  loginWithPassword: (email: string, password: string) => Promise<void>;
+  loginWithPassword: (email: string, password: string) => Promise<any>;
+  verifyOtp: (email: string, otpCode: string) => Promise<any>;
+  resendOtp: (email: string) => Promise<any>;
   logout: () => Promise<void>;
 }
 
@@ -101,6 +103,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         status: data.status,
       });
     }
+    return data;
+  };
+
+  const verifyOtp = async (email: string, otpCode: string) => {
+    const res = await api.post<any>("api/auth/verify-otp", { email, otp_code: otpCode });
+    const data = res.data?.data || res.data;
+    if (data.token) {
+      localStorage.setItem("token", data.token);
+      setUser({
+        email: data.email,
+        name: data.name,
+        role: data.role,
+        status: data.status,
+      });
+    }
+    return data;
+  };
+
+  const resendOtp = async (email: string) => {
+    const res = await api.post<any>("api/auth/resend-otp", { email });
+    return res.data?.data || res.data;
   };
 
   const logout = async () => {
@@ -131,6 +154,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         login,
         loginWithPassword,
+        verifyOtp,
+        resendOtp,
         logout,
       }}
     >
