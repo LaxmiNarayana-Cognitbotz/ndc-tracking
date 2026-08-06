@@ -21,8 +21,20 @@ def setup_logging():
             f.write(f"\n========================\nServer started at - {now_str}\n========================\n")
         os.environ["SERVER_BANNER_PRINTED"] = "1"
     
-    # Create file handler with log rotation (max 10MB per file)
-    file_handler = RotatingFileHandler(log_file, maxBytes=10*1024*1024, backupCount=5, encoding="utf-8")
+    # Create file handler with log rotation (max 30MB per file)
+    file_handler = RotatingFileHandler(log_file, maxBytes=30*1024*1024, backupCount=5, encoding="utf-8")
+    
+    def custom_log_namer(default_name):
+        # default_name is like '.../server_logs.log.1'
+        # Change it to '.../server_logs_2.log'
+        parts = default_name.rsplit(".log.", 1)
+        if len(parts) == 2 and parts[1].isdigit():
+            base, count_str = parts
+            count = int(count_str)
+            return f"{base}_{count + 1}.log"
+        return default_name
+        
+    file_handler.namer = custom_log_namer
     
     # Date format: DD-MM-YY HH:MM:SS
     file_formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%d-%m-%y %H:%M:%S")
