@@ -220,6 +220,11 @@ class EmailService:
             {"success": bool, "message": str}
         """
         try:
+            # Check if email notifications are enabled
+            if os.getenv("EMAIL_NOTIFICATION", "on").lower() not in ("on", "true", "1", "yes"):
+                logger.info("Email notifications are disabled (EMAIL_NOTIFICATION=%s). Skipping delayed reminder email.", os.getenv("EMAIL_NOTIFICATION"))
+                return {"success": True, "message": "Email notifications are disabled. Email not sent."}
+
             smtp_host = os.getenv("SMTP_HOST") or os.getenv("SMTP_SERVER", "smtp.gmail.com")
             smtp_port = int(os.getenv("SMTP_PORT", "587"))
             smtp_user = os.getenv("SMTP_USER") or os.getenv("SMTP_USERNAME", "")
@@ -291,6 +296,11 @@ class EmailService:
         """
 
         try:
+            # Check if email notifications are enabled
+            if os.getenv("EMAIL_NOTIFICATION", "on").lower() not in ("on", "true", "1", "yes"):
+                logger.info("Email notifications are disabled (EMAIL_NOTIFICATION=%s). Skipping F&F details email to %s.", os.getenv("EMAIL_NOTIFICATION"), email_to)
+                return {"success": True, "message": "Email notifications are disabled. Email not sent."}
+
             smtp_host = os.getenv("SMTP_HOST") or os.getenv("SMTP_SERVER", "smtp.gmail.com")
             smtp_port = int(os.getenv("SMTP_PORT", "587"))
             smtp_user = os.getenv("SMTP_USER") or os.getenv("SMTP_USERNAME", "")
@@ -633,6 +643,11 @@ class EmailService:
     def send_notification_email(records, recipient, stage_name, manager_name=None, is_tomorrow=False):
         """Format the records as HTML and send via SMTP."""
         try:
+            # Check if email notifications are enabled
+            if os.getenv("EMAIL_NOTIFICATION", "on").lower() not in ("on", "true", "1", "yes"):
+                logger.info("Email notifications are disabled (EMAIL_NOTIFICATION=%s). Skipping %s notification email to %s.", os.getenv("EMAIL_NOTIFICATION"), stage_name, recipient)
+                return False
+
             smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
             smtp_port = int(os.getenv("SMTP_PORT", "587"))
             smtp_user = os.getenv("SMTP_USER", "")
@@ -783,6 +798,11 @@ class EmailService:
     def send_duplicate_managers_report(records, recipient):
         """Format the conflicting/duplicate RM records as HTML and send to HR."""
         try:
+            # Check if email notifications are enabled
+            if os.getenv("EMAIL_NOTIFICATION", "on").lower() not in ("on", "true", "1", "yes"):
+                logger.info("Email notifications are disabled (EMAIL_NOTIFICATION=%s). Skipping duplicate managers report email to %s.", os.getenv("EMAIL_NOTIFICATION"), recipient)
+                return False
+
             smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
             smtp_port = int(os.getenv("SMTP_PORT", "587"))
             smtp_user = os.getenv("SMTP_USER", "")
@@ -981,6 +1001,11 @@ class EmailService:
     async def run_10am_job():
         """Daily 10:00 AM Email Job to send all pending approval updates."""
         try:
+            # Check if email notifications are enabled
+            if os.getenv("EMAIL_NOTIFICATION", "on").lower() not in ("on", "true", "1", "yes"):
+                logger.info("Email notifications are disabled (EMAIL_NOTIFICATION=%s). Skipping 10:00 AM email job entirely.", os.getenv("EMAIL_NOTIFICATION"))
+                return
+
             logger.info("Starting consolidated 10:00 AM email job...")
             records_map = await EmailService.fetch_all_data()
         
@@ -1266,6 +1291,11 @@ class EmailService:
     async def run_tomorrow_alert_job():
         """Tomorrow Alert Job specifically for IT & Security pending actions."""
         try:
+            # Check if email notifications are enabled
+            if os.getenv("EMAIL_NOTIFICATION", "on").lower() not in ("on", "true", "1", "yes"):
+                logger.info("Email notifications are disabled (EMAIL_NOTIFICATION=%s). Skipping tomorrow alert job entirely.", os.getenv("EMAIL_NOTIFICATION"))
+                return
+
             logger.info("Starting Tomorrow Alerts (IT & Security) email job...")
             dept_email_map = {}
             async with async_session() as session:
@@ -1307,6 +1337,11 @@ class EmailService:
         and automatically send the F&F details email, updating is_fnf_email_sent to True.
         """
         try:
+            # Check if email notifications are enabled
+            if os.getenv("EMAIL_NOTIFICATION", "on").lower() not in ("on", "true", "1", "yes"):
+                logger.info("Email notifications are disabled (EMAIL_NOTIFICATION=%s). Skipping auto F&F email sending.", os.getenv("EMAIL_NOTIFICATION"))
+                return
+
             logger.info("Auto F&F Email Sender: Starting check...")
         
             # 1. Fetch eligible records
