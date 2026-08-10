@@ -132,9 +132,9 @@ export function FNFManagement() {
     });
   }, [mockNDCData]);
 
-  // F&F TAT calculation with fallbacks for live data compatibility:
-  // Start date fallback sequence: gccInitiateDate -> ndcCompletedDate -> lastWorkingDate
-  // End date fallback sequence: fnfCompletedDate -> fnfRevisionCompletedDate -> fnfActionDate
+  // F&F TAT calculation: measures days from GCC Initiate Date to F&F completion.
+  // Start date priority: gccInitiateDate -> ndcCompletedDate -> lastWorkingDate
+  // End date fallback: fnfCompletedDate -> fnfRevisionCompletedDate -> fnfActionDate
   const tatRecordsWithDays = useMemo(() => {
     return eligibleRecords.map((r) => {
       const isCompleted = getProp(r, "isFnfCompleted", "is_fnf_completed");
@@ -152,6 +152,7 @@ export function FNFManagement() {
       const fnfRevCompleted = getProp(r, "fnfRevisionCompletedDate", "fnf_revision_completed_date");
       const fnfAction = getProp(r, "fnfActionDate", "fnf_action_date");
 
+      // F&F TAT = days from GCC Initiate Date to F&F completion
       const startDate = parseValidDate(gccInitiate) || parseValidDate(ndcCompleted) || parseValidDate(lwd);
       const endDate = parseValidDate(fnfCompleted) || parseValidDate(fnfRevCompleted) || parseValidDate(fnfAction);
 
