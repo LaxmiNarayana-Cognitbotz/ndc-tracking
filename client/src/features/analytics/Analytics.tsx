@@ -40,6 +40,22 @@ const DEPT_STATUS_FIELDS: Record<string, keyof NDCRecord> = {
   "Legatrix": "legatrixApprovalStatus",
 };
 
+const DEPT_DATE_FIELDS: Record<string, keyof NDCRecord> = {
+  "RM": "rmApprovalDate",
+  "IT": "itApprovalDate",
+  "Abex": "abexApprovalDate",
+  "Telecom": "telecomApprovalDate",
+  "Store": "storeApprovalDate",
+  "Safety": "safetyApprovalDate",
+  "Administration": "administrationApprovalDate",
+  "Security": "securityApprovalDate",
+  "HR": "hrApprovalDate",
+  "GCC HR": "gccHrApprovalDate",
+  "Business Specific": "businessSpecificApprovalDate",
+  "Final Abex": "finalAbexApprovalDate",
+  "Legatrix": "legatrixApprovalDate",
+};
+
 const APPROVAL_DEPT_OPTIONS = Object.keys(DEPT_STATUS_FIELDS).sort((a, b) => a.localeCompare(b));
 
 const getFnfCompletionDays = (record: NDCRecord) => {
@@ -111,15 +127,15 @@ export function Analytics() {
   }, [mockNDCData, ndcChartApprovalFilter]);
 
   const statusData = useMemo(() => {
-    const completed = ndcChartFilteredData.filter((r) => r.ndcStage === "NDC Completed").length;
-    const pending = ndcChartFilteredData.filter((r) => r.ndcStage === "GCC Pending").length;
-    const inProgress = ndcChartFilteredData.filter((r) => r.ndcStage === "Recovery Pending").length;
+    const completed = mockNDCData.filter((r) => r.ndcStage === "NDC Completed").length;
+    const pending = mockNDCData.filter((r) => r.ndcStage === "GCC Pending").length;
+    const inProgress = mockNDCData.filter((r) => r.ndcStage === "Recovery Pending").length;
     return [
       { name: "Completed", y: completed, color: "#10b981" },
       { name: "Pending", y: pending, color: "#ef4444" },
       { name: "In Progress", y: inProgress, color: "#f59e0b" },
     ].filter((d) => d.y > 0);
-  }, [ndcChartFilteredData]);
+  }, [mockNDCData]);
 
   const totalStatusCount = statusData.reduce((sum, d) => sum + d.y, 0);
 
@@ -134,7 +150,7 @@ export function Analytics() {
       pie: {
         innerSize: "75%",
         size: "85%",
-        showInLegend: false,
+ showInLegend: false,
         dataLabels: {
           enabled: true,
           format: "{point.name}: {point.y} ({point.percentage:.1f}%)",
@@ -243,7 +259,7 @@ export function Analytics() {
     }));
   }, [mockNDCData]);
 
-  // NDC Analysis (same structure as F&F)
+  // NDC Analysis (filtered by Approval Department — shows dept-specific delay)
   const ndcAnalysisData = useMemo(() => {
     const cats = {
       "On or due date": 0,
@@ -253,10 +269,27 @@ export function Analytics() {
       "More than 30 days": 0,
     };
 
-    mockNDCData.forEach((record) => {
+    ndcChartFilteredData.forEach((record) => {
       if (record.ndcStage !== "NDC Completed") return;
-      
-      const days = getNdcCompletionDays(record);
+
+      let days: number | null = null;
+
+      if (ndcChartApprovalFilter) {
+        // Department-specific: days from ndcInitiatedDate to that dept's approval date
+        const dateField = DEPT_DATE_FIELDS[ndcChartApprovalFilter];
+        const statusField = DEPT_STATUS_FIELDS[ndcChartApprovalFilter];
+        if (!dateField || !statusField) return;
+        if (record[statusField] !== "Completed") return;
+        const deptDateStr = record[dateField] as string;
+        if (!deptDateStr || !record.ndcInitiatedDate) return;
+        const deptDate = new Date(deptDateStr);
+        const initiated = new Date(record.ndcInitiatedDate);
+        days = Math.max(0, Math.ceil((deptDate.getTime() - initiated.getTime()) / (1000 * 60 * 60 * 24)));
+      } else {
+        // All: overall NDC completion days
+        days = getNdcCompletionDays(record);
+      }
+
       if (days === null) return;
 
       if (days <= 0) cats["On or due date"]++;
@@ -281,7 +314,7 @@ export function Analytics() {
       pct: total > 0 ? Math.round((count / total) * 100) : 0,
       fill: colorMap[name],
     }));
-  }, [mockNDCData]);
+  }, [ndcChartFilteredData, ndcChartApprovalFilter]);
 
   // F&F Closed TAT Analysis
   const fnfClosedTATData = useMemo(() => {
