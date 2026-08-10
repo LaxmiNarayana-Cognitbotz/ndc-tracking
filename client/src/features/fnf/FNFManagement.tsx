@@ -50,9 +50,23 @@ export function FNFManagement() {
     setCurrentPage(1);
   }, [statusFilter, searchQuery]);
 
-  // F&F eligible = NDC Completed AND GCC HR Completed
-  const isEligible = (r: NDCRecord) =>
-    r.ndcStage === "NDC Completed" && r.gccHrApprovalStatus === "Completed";
+  // Helper to parse dates safely
+  const parseValidDate = (dateStr?: string): Date | null => {
+    if (!dateStr || !dateStr.trim()) return null;
+    const d = new Date(dateStr);
+    return isNaN(d.getTime()) ? null : d;
+  };
+
+  // Helper to check case-insensitive status match
+  const matchStatus = (val?: string, target?: string) =>
+    (val || "").trim().toLowerCase() === (target || "").trim().toLowerCase();
+
+  // F&F eligible = NDC Completed AND GCC HR Completed (or F&F completed/closed)
+  const isEligible = (r: NDCRecord) => {
+    const isNdcDone = matchStatus(r.ndcStage, "NDC Completed") || matchStatus(r.ndcStage, "Completed");
+    const isGccDone = matchStatus(r.gccHrApprovalStatus, "Completed");
+    return (isNdcDone && isGccDone) || r.isFnfCompleted || r.isFnfClosed;
+  };
 
   const eligibleRecords = useMemo(() => mockNDCData.filter(isEligible), [mockNDCData]);
 
@@ -95,27 +109,40 @@ export function FNFManagement() {
     });
   }, [mockNDCData]);
 
+  // F&F TAT calculation with fallbacks for live data compatibility:
+  // Start date fallback sequence: gccInitiateDate -> ndcCompletedDate -> lastWorkingDate
+  // End date fallback sequence: fnfCompletedDate -> fnfRevisionCompletedDate -> fnfActionDate
+  const tatRecordsWithDays = useMemo(() => {
+    return eligibleRecords.map((r) => {
+      const isDone = r.isFnfCompleted || r.isFnfClosed || matchStatus(r.fnfStatus, "Done") || matchStatus(r.fnfStatus, "Completed");
+      if (!isDone) return null;
+
+      const startDate = parseValidDate(r.gccInitiateDate) || parseValidDate(r.ndcCompletedDate) || parseValidDate(r.lastWorkingDate);
+      const endDate = parseValidDate(r.fnfCompletedDate) || parseValidDate(r.fnfRevisionCompletedDate) || parseValidDate(r.fnfActionDate);
+
+      if (!startDate || !endDate) return null;
+
+      const diffMs = Math.abs(endDate.getTime() - startDate.getTime());
+      const days = Math.round(diffMs / (1000 * 60 * 60 * 24));
+      return { record: r, days };
+    }).filter((item): item is { record: NDCRecord; days: number } => item !== null);
+  }, [eligibleRecords]);
+
+  const tatRecords = useMemo(() => tatRecordsWithDays.map((item) => item.record), [tatRecordsWithDays]);
+
   const fnfStats = useMemo(() => {
     const total = eligibleRecords.length;
-    const done = eligibleRecords.filter((r) => r.isFnfCompleted).length;
-    const open = eligibleRecords.filter((r) => !r.isFnfCompleted && !r.isFnfRevision).length;
+    const done = eligibleRecords.filter((r) => r.isFnfCompleted || r.isFnfClosed).length;
+    const open = eligibleRecords.filter((r) => !r.isFnfCompleted && !r.isFnfClosed && !r.isFnfRevision).length;
     const revision = eligibleRecords.filter((r) => r.isFnfRevision).length;
     const closed = eligibleRecords.filter((r) => r.isFnfClosed).length;
 
-    // F&F TAT = fnfCompletedDate - gccInitiateDate
-    const tatRecords = eligibleRecords.filter((r) => r.isFnfCompleted && r.fnfCompletedDate && r.gccInitiateDate);
-    const avgTAT = tatRecords.length > 0
-      ? Math.round(
-        tatRecords.reduce((sum, r) => {
-          const end = new Date(r.fnfCompletedDate);
-          const start = new Date(r.gccInitiateDate);
-          return sum + Math.abs((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-        }, 0) / tatRecords.length
-      )
+    const avgTAT = tatRecordsWithDays.length > 0
+      ? Math.round(tatRecordsWithDays.reduce((sum, item) => sum + item.days, 0) / tatRecordsWithDays.length)
       : 0;
 
     return { total, done, open, revision, closed, avgTAT };
-  }, [eligibleRecords]);
+  }, [eligibleRecords, tatRecordsWithDays]);
 
   const handleAction = (record: NDCRecord, action: "closed" | "revision") => {
     if (action === "closed") {
@@ -156,11 +183,11 @@ export function FNFManagement() {
   const handleKPIClick = (type: "total" | "done" | "open" | "revision" | "closed" | "avgTAT" | "fnfDelayed") => {
     const map = {
       total: { title: "Total F&F In Process", data: eligibleRecords },
-      done: { title: "F&F Completed", data: eligibleRecords.filter((r) => r.isFnfCompleted) },
-      open: { title: "F&F Open", data: eligibleRecords.filter((r) => !r.isFnfCompleted && !r.isFnfRevision) },
+      done: { title: "F&F Completed", data: eligibleRecords.filter((r) => r.isFnfCompleted || r.isFnfClosed) },
+      open: { title: "F&F Open", data: eligibleRecords.filter((r) => !r.isFnfCompleted && !r.isFnfClosed && !r.isFnfRevision) },
       revision: { title: "Revision Required", data: eligibleRecords.filter((r) => r.isFnfRevision) },
       closed: { title: "F&F Closed", data: eligibleRecords.filter((r) => r.isFnfClosed) },
-      avgTAT: { title: "F&F TAT Records", data: eligibleRecords.filter((r) => r.isFnfCompleted && r.fnfCompletedDate && r.gccInitiateDate) },
+      avgTAT: { title: "F&F TAT Records", data: tatRecords },
       fnfDelayed: { title: "F&F Delayed Cases", data: fnfDelayedData },
     };
     setKpiModalData(map[type]);
