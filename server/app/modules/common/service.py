@@ -69,7 +69,7 @@ class CommonService:
         for record in records:
             record_approvals = approvals_by_record.get(record.id, [])
 
-            # Derive gcc_initiate_date from GCC HR approval stage_started_at (with fallbacks)
+            # Derive gcc_initiate_date from GCC HR approval stage_started_at
             gcc_initiate = record.gcc_initiate_date
             if not gcc_initiate:
                 for a in record_approvals:
@@ -80,8 +80,9 @@ class CommonService:
                             else a.stage_started_at
                         )
                         break
+            # Fallback to ndc_initiated_date if gcc_initiate_date is still not available
             if not gcc_initiate:
-                gcc_initiate = record.ndc_completed_date or record.last_working_date or record.ndc_initiated_date
+                gcc_initiate = record.ndc_initiated_date
 
             # Check if an F&F document file exists on the server in the uploads folder
             fnf_doc_name = ""
