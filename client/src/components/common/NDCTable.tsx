@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { NDCRecord } from "../../types";
 import { StatusBadge } from "./StatusBadge";
+import { getPendingDepartments } from "../../utils/pendingDepartments";
 import { ChevronLeft, ChevronRight, Download, Settings } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Checkbox } from "../ui/checkbox";
@@ -22,6 +23,7 @@ const allColumns = [
   { key: "employeeName", label: "Name", sortable: true },
   { key: "department", label: "Department", sortable: true },
   { key: "ndcStage", label: "NDC Stage", sortable: false },
+  { key: "pendingDepartments", label: "Pending Departments", sortable: false },
   { key: "resignationDate", label: "Resignation Date", sortable: false },
   { key: "lastWorkingDate", label: "Last Working Date", sortable: false },
   { key: "ndcInitiatedDate", label: "NDC Initiated Date", sortable: true },
@@ -87,6 +89,10 @@ export function NDCTable({
 
   const renderCellValue = (record: NDCRecord, columnKey: string) => {
     const value = record[columnKey as keyof NDCRecord];
+
+    if (columnKey === "pendingDepartments") {
+      return getPendingDepartments(record);
+    }
 
     if (columnKey.includes("ApprovalStatus")) {
       return <StatusBadge status={value as string} />;

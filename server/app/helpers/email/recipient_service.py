@@ -141,6 +141,22 @@ class EmailRecipientService:
                     key=lambda r: r.last_working_date or date.min,
                     reverse=True,
                 )
+            elif payload_type == "fnf_delayed":
+                # NDC Completed, but F&F is not completed and past last_working_date
+                result = await db.execute(
+                    select(NdcRecord).where(
+                        NdcRecord.ndc_stage == "NDC Completed",
+                        NdcRecord.is_fnf_completed == False,
+                        NdcRecord.last_working_date < today,
+                        NdcRecord.last_working_date.isnot(None),
+                    )
+                )
+                records = result.scalars().all()
+                sorted_records = sorted(
+                    records,
+                    key=lambda r: EmailService._days_delayed(r.last_working_date),
+                    reverse=True,
+                )
             else:
                 # Default: ndc_delayed
                 # Fetch all overdue non-completed records
@@ -158,7 +174,7 @@ class EmailRecipientService:
                     reverse=True,
                 )
 
-            if payload_type in ("fnf_open", "fnf_revision"):
+            if payload_type in ("fnf_open", "fnf_revision", "fnf_delayed"):
                 selected_records = sorted_records
             else:
                 selected_records = sorted_records[:10]

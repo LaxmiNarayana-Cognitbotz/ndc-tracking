@@ -7,6 +7,7 @@ const headerMapping: Record<string, string> = {
   employeeName: "Employee Name",
   department: "Department",
   ndcStage: "NDC Stage",
+  pendingDepartments: "Pending Departments",
   resignationDate: "Resignation Date",
   lastWorkingDate: "Last Working Date",
   ndcInitiatedDate: "NDC Initiated Date",

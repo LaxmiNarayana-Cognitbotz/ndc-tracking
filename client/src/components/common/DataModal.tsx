@@ -2,6 +2,7 @@ import { X, Download } from "lucide-react";
 import { NDCRecord } from "../../types";
 import { StatusBadge } from "./StatusBadge";
 import { exportToExcel } from "../../utils/excelExport";
+import { getPendingDepartments } from "../../utils/pendingDepartments";
 
 interface DataModalProps {
   isOpen: boolean;
@@ -97,6 +98,7 @@ export function DataModal({ isOpen, onClose, title, data }: DataModalProps) {
                       <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Delay Days</th>
                     )}
                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Overall Status</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Pending Departments</th>
                     
                     {/* All Approval Stages (Status + Date) in proper order */}
                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">RM Approval</th>
@@ -155,6 +157,9 @@ export function DataModal({ isOpen, onClose, title, data }: DataModalProps) {
                         )}
                         <td className="px-4 py-3 text-sm whitespace-nowrap">
                           <StatusBadge status={getOverallStatus(record)} />
+                        </td>
+                        <td className="px-4 py-3 text-sm whitespace-nowrap">
+                          {getPendingDepartments(record)}
                         </td>
                         
                         {/* All Approval Stages Data */}

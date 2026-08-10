@@ -110,6 +110,10 @@ class EmailService:
                 title = "F&F Revision Required Cases Report"
                 intro = f"Please find below the list of the F&F revision required cases identified as of today ({EmailService._fmt_date(date.today())})."
                 col_5 = "F&F Status"
+            elif reminder_type == "fnf_delayed":
+                title = "F&F Delayed Cases Report"
+                intro = f"Please find below the list of the F&F delayed cases identified as of today ({EmailService._fmt_date(date.today())})."
+                col_5 = "Days Delayed"
             else:
                 title = "NDC Delayed Cases – Top 10 Report"
                 intro = f"Please find below the list of the <b>Top {min(len(records), 10)} delayed cases</b> identified as of today ({EmailService._fmt_date(date.today())})."
@@ -251,6 +255,9 @@ class EmailService:
                 subject_line = f"{subj_title} – {len(records)} Records ({EmailService._fmt_date(date.today())})"
             elif reminder_type == "fnf_revision":
                 subj_title = "F&F Revision Required Cases Reminder"
+                subject_line = f"{subj_title} – {len(records)} Records ({EmailService._fmt_date(date.today())})"
+            elif reminder_type == "fnf_delayed":
+                subj_title = "F&F Delayed Cases Reminder"
                 subject_line = f"{subj_title} – {len(records)} Records ({EmailService._fmt_date(date.today())})"
             else:
                 subj_title = "NDC Delayed Cases Reminder"

@@ -6,7 +6,7 @@ import { PPTDownloadButton } from "../../components/common/PPTDownloadButton";
 import { FullScreenModal } from "../../components/common/FullScreenModal";
 import { LoadingScreen } from "../../components/common/LoadingScreen";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../components/ui/dialog";
-import { FileText, Download, Filter, CheckCircle, XCircle, Clock, Send, CheckSquare, Mail, TrendingUp, ChevronLeft, ChevronRight } from "lucide-react";
+import { FileText, Download, Filter, CheckCircle, XCircle, Clock, Send, CheckSquare, Mail, TrendingUp, ChevronLeft, ChevronRight, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 
 export function FNFManagement() {
@@ -42,6 +42,8 @@ export function FNFManagement() {
   const [reminderMailType, setReminderMailType] = useState<string>("fnf_open");
   const [sendingReminder, setSendingReminder] = useState(false);
   const [sendingMail, setSendingMail] = useState(false);
+  const [fnfDelayedTableOpen, setFnfDelayedTableOpen] = useState(false);
+  const [fnfDelayedCurrentPage, setFnfDelayedCurrentPage] = useState(1);
 
   // Reset to first page on filter change
   useEffect(() => {
@@ -83,6 +85,15 @@ export function FNFManagement() {
   const kpiPaginatedData = kpiModalData.data.slice(kpiStartIndex, kpiStartIndex + itemsPerPage);
 
 
+
+  // F&F Delayed: NDC Completed but F&F not completed, past LWD
+  const fnfDelayedData = useMemo(() => {
+    return mockNDCData.filter((r) => {
+      if (r.ndcStage !== "NDC Completed" || r.isFnfCompleted) return false;
+      const days = Math.ceil((new Date().getTime() - new Date(r.lastWorkingDate).getTime()) / (1000 * 60 * 60 * 24));
+      return days > 0;
+    });
+  }, [mockNDCData]);
 
   const fnfStats = useMemo(() => {
     const total = eligibleRecords.length;
@@ -142,7 +153,7 @@ export function FNFManagement() {
     window.location.href = `${baseUrl}/api/ff/download/${record.personNumber}`;
   };
 
-  const handleKPIClick = (type: "total" | "done" | "open" | "revision" | "closed" | "avgTAT") => {
+  const handleKPIClick = (type: "total" | "done" | "open" | "revision" | "closed" | "avgTAT" | "fnfDelayed") => {
     const map = {
       total: { title: "Total F&F In Process", data: eligibleRecords },
       done: { title: "F&F Completed", data: eligibleRecords.filter((r) => r.isFnfCompleted) },
@@ -150,6 +161,7 @@ export function FNFManagement() {
       revision: { title: "Revision Required", data: eligibleRecords.filter((r) => r.isFnfRevision) },
       closed: { title: "F&F Closed", data: eligibleRecords.filter((r) => r.isFnfClosed) },
       avgTAT: { title: "F&F TAT Records", data: eligibleRecords.filter((r) => r.isFnfCompleted && r.fnfCompletedDate && r.gccInitiateDate) },
+      fnfDelayed: { title: "F&F Delayed Cases", data: fnfDelayedData },
     };
     setKpiModalData(map[type]);
     setKpiCurrentPage(1);
@@ -199,8 +211,14 @@ export function FNFManagement() {
     { type: "closed" as const, label: "F&F Closed", value: fnfStats.closed, icon: CheckCircle, color: "text-teal-600" },
     { type: "open" as const, label: "F&F Open", value: fnfStats.open, icon: Clock, color: "text-blue-600" },
     { type: "revision" as const, label: "Revision Required", value: fnfStats.revision, icon: XCircle, color: "text-red-600" },
+    { type: "fnfDelayed" as const, label: "F&F Delayed Cases", value: fnfDelayedData.length, icon: AlertCircle, color: "text-orange-600" },
     { type: "avgTAT" as const, label: "F&F TAT (In Days)", value: fnfStats.avgTAT, icon: TrendingUp, color: "text-purple-600" },
   ];
+
+  const fnfDelayedItemsPerPage = 10;
+  const fnfDelayedTotalPages = Math.max(1, Math.ceil(fnfDelayedData.length / fnfDelayedItemsPerPage));
+  const fnfDelayedStartIndex = (fnfDelayedCurrentPage - 1) * fnfDelayedItemsPerPage;
+  const fnfDelayedPaginated = fnfDelayedData.slice(fnfDelayedStartIndex, fnfDelayedStartIndex + fnfDelayedItemsPerPage);
 
   if (isLoading) return <LoadingScreen />;
 
@@ -225,15 +243,20 @@ export function FNFManagement() {
         <PPTDownloadButton onDownload={handleDownloadPPT} />
       </div>
 
+
+
       {/* KPI Cards */}
       <div id="section-fnf-kpis" className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
         {kpiCards.map(({ type, label, value, icon: Icon, color }) => {
-          const isInteractive = type !== "avgTAT";
+          const isInteractive = type !== "avgTAT" && type !== "fnfDelayed";
+          const handleClick = type === "fnfDelayed"
+            ? () => { setFnfDelayedTableOpen(true); setFnfDelayedCurrentPage(1); }
+            : isInteractive ? () => handleKPIClick(type) : undefined;
           return (
             <div
               key={type}
-              onClick={isInteractive ? () => handleKPIClick(type) : undefined}
-              className={`bg-card rounded-[4px] p-5 border border-border h-[110px] flex flex-col justify-between ${isInteractive ? "cursor-pointer hover:scale-105 transition-transform duration-200" : ""
+              onClick={handleClick}
+              className={`bg-card rounded-[4px] p-5 border border-border h-[110px] flex flex-col justify-between ${type !== "avgTAT" ? "cursor-pointer hover:scale-105 transition-transform duration-200" : ""
                 }`}
             >
               <div className="flex items-start justify-between gap-2">
@@ -331,6 +354,7 @@ export function FNFManagement() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Department</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Last working date</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">F&amp;F status</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">F&amp;F completed date</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">NDC status</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Actions</th>
               </tr>
@@ -343,6 +367,7 @@ export function FNFManagement() {
                   <td className="px-4 py-3 text-sm">{record.department}</td>
                   <td className="px-4 py-3 text-sm whitespace-nowrap">{record.lastWorkingDate}</td>
                   <td className="px-4 py-3 text-sm">{getFNFStatusBadge(record)}</td>
+                  <td className="px-4 py-3 text-sm whitespace-nowrap">{record.fnfCompletedDate || "-"}</td>
                   <td className="px-4 py-3 text-sm">{getNDCStatusBadge(record)}</td>
                   <td className="px-4 py-3 text-sm">
                     <div className="flex gap-2 items-center">
@@ -381,7 +406,7 @@ export function FNFManagement() {
               ))}
               {filteredData.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">No F&amp;F records found</td>
+                  <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">No F&amp;F records found</td>
                 </tr>
               )}
             </tbody>
@@ -448,7 +473,8 @@ export function FNFManagement() {
                   "Department": r.department,
                   "Last working date": r.lastWorkingDate,
                   "NDC stage": r.ndcStage,
-                  "F&F status": getFNFStatusLabel(r)
+                  "F&F status": getFNFStatusLabel(r),
+                  "F&F completed date": r.fnfCompletedDate || "-"
                 }));
                 exportToExcel(mappedData, kpiModalData.title || "KPI_Records");
               }}
@@ -477,6 +503,7 @@ export function FNFManagement() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Last working date</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">NDC stage</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">F&amp;F status</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">F&amp;F completed date</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border bg-card">
@@ -488,11 +515,12 @@ export function FNFManagement() {
                       <td className="px-4 py-3 whitespace-nowrap">{record.lastWorkingDate}</td>
                       <td className="px-4 py-3 whitespace-nowrap">{record.ndcStage}</td>
                       <td className="px-4 py-3">{getFNFStatusBadge(record)}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">{record.fnfCompletedDate || "-"}</td>
                     </tr>
                   ))}
                   {kpiModalData.data.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">No records found</td>
+                      <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">No records found</td>
                     </tr>
                   )}
                 </tbody>
@@ -711,6 +739,105 @@ export function FNFManagement() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* F&F Delayed Table Modal */}
+      <FullScreenModal
+        open={fnfDelayedTableOpen}
+        onClose={() => setFnfDelayedTableOpen(false)}
+        title="F&F Delayed Cases"
+        headerActions={
+          <div className="flex items-center gap-3">
+            <button
+              disabled={fnfDelayedData.length === 0}
+              onClick={() => {
+                setReminderMailEmailTo("");
+                setReminderMailType("fnf_delayed");
+                setReminderMailDialogOpen(true);
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground text-sm rounded-[4px] hover:bg-primary/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              <Mail className="w-4 h-4" />
+              Send Reminder
+            </button>
+            <button
+              disabled={fnfDelayedData.length === 0}
+              onClick={() => {
+                const mappedData = fnfDelayedData.map(r => ({
+                  "Person Number": r.personNumber,
+                  "Name": r.employeeName,
+                  "Department": r.department,
+                  "Last Working Date": r.lastWorkingDate,
+                  "NDC Cleared Date": r.ndcCompletedDate || "-",
+                  "F&F Status": r.fnfStatus,
+                  "Days Delayed": Math.ceil((new Date().getTime() - new Date(r.lastWorkingDate).getTime()) / (1000 * 60 * 60 * 24))
+                }));
+                exportToExcel(mappedData, "FnF_Delayed_Cases");
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground text-sm rounded-[4px] hover:bg-primary/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              <Download className="w-4 h-4" />
+              Export to Excel
+            </button>
+          </div>
+        }
+      >
+        <div className="flex-1 overflow-auto p-6">
+          <div className="h-full flex flex-col">
+            <h3 className="text-base font-semibold text-orange-800 mb-3 shrink-0">
+              F&amp;F delayed cases <span className="ml-2 text-sm font-normal text-muted-foreground">({fnfDelayedData.length} records)</span>
+            </h3>
+            <div className="overflow-x-auto rounded-[4px] border border-orange-200 flex-1">
+              <table className="w-full text-sm">
+                <thead className="bg-orange-50 sticky top-0 z-10">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">Person Number</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">Name</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">Department</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">Last Working Date</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">NDC Cleared Date</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">F&amp;F Status</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">Days Delayed</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-orange-100 bg-card">
+                  {fnfDelayedData.length === 0 ? (
+                    <tr><td colSpan={7} className="px-4 py-6 text-center text-muted-foreground">No records found</td></tr>
+                  ) : fnfDelayedPaginated.map((record) => {
+                    const delayDays = Math.ceil((new Date().getTime() - new Date(record.lastWorkingDate).getTime()) / (1000 * 60 * 60 * 24));
+                    return (
+                      <tr key={record.id} className="hover:bg-orange-50/50">
+                        <td className="px-4 py-3 whitespace-nowrap font-medium">{record.personNumber}</td>
+                        <td className="px-4 py-3 whitespace-nowrap">{record.employeeName}</td>
+                        <td className="px-4 py-3">{record.department}</td>
+                        <td className="px-4 py-3 whitespace-nowrap">{record.lastWorkingDate}</td>
+                        <td className="px-4 py-3 whitespace-nowrap">{record.ndcCompletedDate || "-"}</td>
+                        <td className="px-4 py-3">
+                          <span className="inline-flex items-center px-2 py-1 rounded-[4px] text-xs font-medium bg-orange-100 text-orange-700 whitespace-nowrap">{record.fnfStatus}</span>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700">{delayDays} days</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {fnfDelayedData.length > 0 && (
+              <div className="mt-4 flex items-center justify-between shrink-0">
+                <div className="text-sm text-muted-foreground">
+                  Showing {fnfDelayedStartIndex + 1} to {Math.min(fnfDelayedStartIndex + fnfDelayedItemsPerPage, fnfDelayedData.length)} of {fnfDelayedData.length} records
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setFnfDelayedCurrentPage(Math.max(1, fnfDelayedCurrentPage - 1))} disabled={fnfDelayedCurrentPage === 1} className="p-2 rounded-[4px] border border-border hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"><ChevronLeft className="w-4 h-4" /></button>
+                  <span className="text-sm text-foreground">Page {fnfDelayedCurrentPage} of {fnfDelayedTotalPages}</span>
+                  <button onClick={() => setFnfDelayedCurrentPage(Math.min(fnfDelayedTotalPages, fnfDelayedCurrentPage + 1))} disabled={fnfDelayedCurrentPage === fnfDelayedTotalPages} className="p-2 rounded-[4px] border border-border hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"><ChevronRight className="w-4 h-4" /></button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </FullScreenModal>
     </div>
   );
 }
