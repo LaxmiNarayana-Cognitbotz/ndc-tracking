@@ -50,10 +50,19 @@ export function FNFManagement() {
     setCurrentPage(1);
   }, [statusFilter, searchQuery]);
 
-  // Helper to parse dates safely
+  // Helper to parse dates safely (handles YYYY-MM-DD, DD-MM-YYYY, DD/MM/YYYY)
   const parseValidDate = (dateStr?: string): Date | null => {
-    if (!dateStr || !dateStr.trim()) return null;
-    const d = new Date(dateStr);
+    if (!dateStr || typeof dateStr !== "string" || !dateStr.trim()) return null;
+    const str = dateStr.trim();
+    const ddmmyyyyMatch = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+    if (ddmmyyyyMatch) {
+      const day = parseInt(ddmmyyyyMatch[1], 10);
+      const month = parseInt(ddmmyyyyMatch[2], 10) - 1;
+      const year = parseInt(ddmmyyyyMatch[3], 10);
+      const d = new Date(year, month, day);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    const d = new Date(str);
     return isNaN(d.getTime()) ? null : d;
   };
 
@@ -61,11 +70,20 @@ export function FNFManagement() {
   const matchStatus = (val?: string, target?: string) =>
     (val || "").trim().toLowerCase() === (target || "").trim().toLowerCase();
 
+  // Helper to get property in either camelCase or snake_case
+  const getProp = (r: any, camelKey: string, snakeKey: string) =>
+    r[camelKey] !== undefined ? r[camelKey] : r[snakeKey];
+
   // F&F eligible = NDC Completed AND GCC HR Completed (or F&F completed/closed)
   const isEligible = (r: NDCRecord) => {
-    const isNdcDone = matchStatus(r.ndcStage, "NDC Completed") || matchStatus(r.ndcStage, "Completed");
-    const isGccDone = matchStatus(r.gccHrApprovalStatus, "Completed");
-    return (isNdcDone && isGccDone) || r.isFnfCompleted || r.isFnfClosed;
+    const stage = getProp(r, "ndcStage", "ndc_stage");
+    const gccStatus = getProp(r, "gccHrApprovalStatus", "gcc_hr_approval_status");
+    const isCompleted = getProp(r, "isFnfCompleted", "is_fnf_completed");
+    const isClosed = getProp(r, "isFnfClosed", "is_fnf_closed");
+
+    const isNdcDone = matchStatus(stage, "NDC Completed") || matchStatus(stage, "Completed");
+    const isGccDone = matchStatus(gccStatus, "Completed");
+    return (isNdcDone && isGccDone) || !!isCompleted || !!isClosed;
   };
 
   const eligibleRecords = useMemo(() => mockNDCData.filter(isEligible), [mockNDCData]);
@@ -73,17 +91,17 @@ export function FNFManagement() {
   const filteredData = useMemo(() => {
     let filtered = eligibleRecords;
     if (statusFilter) {
-      if (statusFilter === "Done") filtered = filtered.filter((r) => r.isFnfCompleted);
-      else if (statusFilter === "Closed") filtered = filtered.filter((r) => r.isFnfClosed);
-      else if (statusFilter === "Open") filtered = filtered.filter((r) => !r.isFnfCompleted && !r.isFnfRevision);
-      else if (statusFilter === "Revision Required") filtered = filtered.filter((r) => r.isFnfRevision);
+      if (statusFilter === "Done") filtered = filtered.filter((r) => getProp(r, "isFnfCompleted", "is_fnf_completed"));
+      else if (statusFilter === "Closed") filtered = filtered.filter((r) => getProp(r, "isFnfClosed", "is_fnf_closed"));
+      else if (statusFilter === "Open") filtered = filtered.filter((r) => !getProp(r, "isFnfCompleted", "is_fnf_completed") && !getProp(r, "isFnfRevision", "is_fnf_revision"));
+      else if (statusFilter === "Revision Required") filtered = filtered.filter((r) => getProp(r, "isFnfRevision", "is_fnf_revision"));
     }
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(
         (r) =>
-          String(r.employeeName || "").toLowerCase().includes(query) ||
-          String(r.personNumber || "").toLowerCase().includes(query)
+          String(getProp(r, "employeeName", "employee_name") || "").toLowerCase().includes(query) ||
+          String(getProp(r, "personNumber", "person_number") || "").toLowerCase().includes(query)
       );
     }
     return filtered;
@@ -103,8 +121,13 @@ export function FNFManagement() {
   // F&F Delayed: NDC Completed but F&F not completed, past LWD
   const fnfDelayedData = useMemo(() => {
     return mockNDCData.filter((r) => {
-      if (r.ndcStage !== "NDC Completed" || r.isFnfCompleted) return false;
-      const days = Math.ceil((new Date().getTime() - new Date(r.lastWorkingDate).getTime()) / (1000 * 60 * 60 * 24));
+      const stage = getProp(r, "ndcStage", "ndc_stage");
+      const isCompleted = getProp(r, "isFnfCompleted", "is_fnf_completed");
+      const lwd = getProp(r, "lastWorkingDate", "last_working_date");
+      if (!matchStatus(stage, "NDC Completed") || isCompleted) return false;
+      const parsedLwd = parseValidDate(lwd);
+      if (!parsedLwd) return false;
+      const days = Math.ceil((new Date().getTime() - parsedLwd.getTime()) / (1000 * 60 * 60 * 24));
       return days > 0;
     });
   }, [mockNDCData]);
@@ -114,11 +137,23 @@ export function FNFManagement() {
   // End date fallback sequence: fnfCompletedDate -> fnfRevisionCompletedDate -> fnfActionDate
   const tatRecordsWithDays = useMemo(() => {
     return eligibleRecords.map((r) => {
-      const isDone = r.isFnfCompleted || r.isFnfClosed || matchStatus(r.fnfStatus, "Done") || matchStatus(r.fnfStatus, "Completed");
+      const isCompleted = getProp(r, "isFnfCompleted", "is_fnf_completed");
+      const isClosed = getProp(r, "isFnfClosed", "is_fnf_closed");
+      const fnfStatus = getProp(r, "fnfStatus", "fnf_status");
+
+      const isDone = !!isCompleted || !!isClosed || matchStatus(fnfStatus, "Done") || matchStatus(fnfStatus, "Completed");
       if (!isDone) return null;
 
-      const startDate = parseValidDate(r.gccInitiateDate) || parseValidDate(r.ndcCompletedDate) || parseValidDate(r.lastWorkingDate);
-      const endDate = parseValidDate(r.fnfCompletedDate) || parseValidDate(r.fnfRevisionCompletedDate) || parseValidDate(r.fnfActionDate);
+      const gccInitiate = getProp(r, "gccInitiateDate", "gcc_initiate_date");
+      const ndcCompleted = getProp(r, "ndcCompletedDate", "ndc_completed_date");
+      const lwd = getProp(r, "lastWorkingDate", "last_working_date");
+
+      const fnfCompleted = getProp(r, "fnfCompletedDate", "fnf_completed_date");
+      const fnfRevCompleted = getProp(r, "fnfRevisionCompletedDate", "fnf_revision_completed_date");
+      const fnfAction = getProp(r, "fnfActionDate", "fnf_action_date");
+
+      const startDate = parseValidDate(gccInitiate) || parseValidDate(ndcCompleted) || parseValidDate(lwd);
+      const endDate = parseValidDate(fnfCompleted) || parseValidDate(fnfRevCompleted) || parseValidDate(fnfAction);
 
       if (!startDate || !endDate) return null;
 
@@ -132,10 +167,10 @@ export function FNFManagement() {
 
   const fnfStats = useMemo(() => {
     const total = eligibleRecords.length;
-    const done = eligibleRecords.filter((r) => r.isFnfCompleted || r.isFnfClosed).length;
-    const open = eligibleRecords.filter((r) => !r.isFnfCompleted && !r.isFnfClosed && !r.isFnfRevision).length;
-    const revision = eligibleRecords.filter((r) => r.isFnfRevision).length;
-    const closed = eligibleRecords.filter((r) => r.isFnfClosed).length;
+    const done = eligibleRecords.filter((r) => getProp(r, "isFnfCompleted", "is_fnf_completed") || getProp(r, "isFnfClosed", "is_fnf_closed")).length;
+    const open = eligibleRecords.filter((r) => !getProp(r, "isFnfCompleted", "is_fnf_completed") && !getProp(r, "isFnfClosed", "is_fnf_closed") && !getProp(r, "isFnfRevision", "is_fnf_revision")).length;
+    const revision = eligibleRecords.filter((r) => getProp(r, "isFnfRevision", "is_fnf_revision")).length;
+    const closed = eligibleRecords.filter((r) => getProp(r, "isFnfClosed", "is_fnf_closed")).length;
 
     const avgTAT = tatRecordsWithDays.length > 0
       ? Math.round(tatRecordsWithDays.reduce((sum, item) => sum + item.days, 0) / tatRecordsWithDays.length)
