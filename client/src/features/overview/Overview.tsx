@@ -12,6 +12,7 @@ import { NDCTable } from "../../components/common/NDCTable";
 import { FullScreenModal } from "../../components/common/FullScreenModal";
 import { LoadingScreen } from "../../components/common/LoadingScreen";
 import { getPendingDepartments } from "../../utils/pendingDepartments";
+import { formatDate, parseDate } from "../../utils/dateFormatter";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "../../components/ui/popover";
 import { Calendar } from "../../components/ui/calendar";
@@ -93,7 +94,7 @@ export function Overview() {
   const [reminderMailDialogOpen, setReminderMailDialogOpen] = useState(false);
   const [reminderMailEmailTo, setReminderMailEmailTo] = useState("");
   const [reminderMailType, setReminderMailType] = useState<string>("ndc_delayed");
-  const itemsPerPage = 10;
+  const itemsPerPage = 20;
 
   useEffect(() => {
     setIsLoading(true);
@@ -161,6 +162,21 @@ export function Overview() {
   const applyApprovalFilters = (filtered: NDCRecord[]) => {
     const normalize = (str: string) => (str || "").toLowerCase().replace(/[_\s]+/g, "");
 
+    const isITOrSecDepartment = (dept: string) => {
+      const norm = normalize(dept);
+      return norm === "it" || norm === "security";
+    };
+
+    const isLWDWithin3Days = (record: NDCRecord) => {
+      const lwd = parseDate(record.lastWorkingDate);
+      if (!lwd) return false;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      lwd.setHours(0, 0, 0, 0);
+      const daysUntilLWD = Math.round((lwd.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      return daysUntilLWD <= 3;
+    };
+
     if (approvalDepartmentFilter && approvalStatusFilter) {
       const statusMap: Record<string, string> = {
         'rm': 'rmApprovalStatus', 'it': 'itApprovalStatus', 'abex': 'abexApprovalStatus',
@@ -171,7 +187,17 @@ export function Overview() {
       };
       const fieldName = statusMap[normalize(approvalDepartmentFilter)] as keyof NDCRecord;
       const targetStatus = normalize(approvalStatusFilter);
-      return filtered.filter((r) => fieldName && normalize(r[fieldName] as string) === targetStatus);
+      const isITOrSec = isITOrSecDepartment(approvalDepartmentFilter);
+
+      return filtered.filter((r) => {
+        if (!fieldName) return false;
+        const status = normalize(r[fieldName] as string);
+        if (status !== targetStatus) return false;
+        if (targetStatus === "pending" && isITOrSec) {
+          return isLWDWithin3Days(r);
+        }
+        return true;
+      });
     } else if (approvalDepartmentFilter) {
       const statusMap: Record<string, string> = {
         'rm': 'rmApprovalStatus', 'it': 'itApprovalStatus', 'abex': 'abexApprovalStatus',
@@ -181,17 +207,43 @@ export function Overview() {
         'businessspecific': 'businessSpecificApprovalStatus', 'legatrix': 'legatrixApprovalStatus'
       };
       const fieldName = statusMap[normalize(approvalDepartmentFilter)] as keyof NDCRecord;
-      return filtered.filter((r) => fieldName && r[fieldName] !== "" && normalize(r[fieldName] as string) !== "notapplicable");
+      const isITOrSec = isITOrSecDepartment(approvalDepartmentFilter);
+
+      return filtered.filter((r) => {
+        if (!fieldName || !r[fieldName]) return false;
+        const status = normalize(r[fieldName] as string);
+        if (status === "notapplicable") return false;
+        if (status === "pending" && isITOrSec) {
+          return isLWDWithin3Days(r);
+        }
+        return true;
+      });
     } else if (approvalStatusFilter) {
       const targetStatus = normalize(approvalStatusFilter);
       return filtered.filter((r) => {
-        const statuses = [
-          r.rmApprovalStatus, r.itApprovalStatus, r.abexApprovalStatus, r.telecomApprovalStatus,
-          r.storeApprovalStatus, r.safetyApprovalStatus, r.administrationApprovalStatus,
-          r.securityApprovalStatus, r.hrApprovalStatus, r.gccHrApprovalStatus, r.finalAbexApprovalStatus,
-          r.businessSpecificApprovalStatus, r.legatrixApprovalStatus
+        const deptKeys: { key: keyof NDCRecord; isITOrSec: boolean }[] = [
+          { key: "rmApprovalStatus", isITOrSec: false },
+          { key: "itApprovalStatus", isITOrSec: true },
+          { key: "abexApprovalStatus", isITOrSec: false },
+          { key: "telecomApprovalStatus", isITOrSec: false },
+          { key: "storeApprovalStatus", isITOrSec: false },
+          { key: "safetyApprovalStatus", isITOrSec: false },
+          { key: "administrationApprovalStatus", isITOrSec: false },
+          { key: "securityApprovalStatus", isITOrSec: true },
+          { key: "hrApprovalStatus", isITOrSec: false },
+          { key: "gccHrApprovalStatus", isITOrSec: false },
+          { key: "finalAbexApprovalStatus", isITOrSec: false },
+          { key: "businessSpecificApprovalStatus", isITOrSec: false },
+          { key: "legatrixApprovalStatus", isITOrSec: false },
         ];
-        return statuses.some((status) => normalize(status) === targetStatus);
+        return deptKeys.some(({ key, isITOrSec }) => {
+          const status = normalize(r[key] as string);
+          if (status !== targetStatus) return false;
+          if (targetStatus === "pending" && isITOrSec) {
+            return isLWDWithin3Days(r);
+          }
+          return true;
+        });
       });
     }
     return filtered;
@@ -330,7 +382,7 @@ export function Overview() {
                   <td className="px-4 py-3 whitespace-nowrap font-medium">{r.personNumber}</td>
                   <td className="px-4 py-3 whitespace-nowrap">{r.employeeName}</td>
                   <td className="px-4 py-3">{r.department}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">{r.lastWorkingDate}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">{formatDate(r.lastWorkingDate)}</td>
                   <td className="px-4 py-3 whitespace-nowrap">{r.ndcStage}</td>
                   <td className="px-4 py-3 whitespace-nowrap">{getPendingDepartments(r)}</td>
                 </tr>
@@ -515,7 +567,7 @@ export function Overview() {
             <KPICard title="Pending NDC with GCC" value={kpis.pendingApproval} icon={AlertTriangle} colorClass="text-orange-600" bgClass="bg-orange-50" />
           </div>
           <div onClick={() => setOverdueModalOpen(true)} className="cursor-pointer hover:scale-105 transition-transform duration-200">
-            <KPICard title="Overdue" value={kpis.overdue} icon={XCircle} colorClass="text-red-700" bgClass="bg-red-100" />
+            <KPICard title="NDC Overdue after Exit" value={kpis.overdue} icon={XCircle} colorClass="text-red-700" bgClass="bg-red-100" />
           </div>
           <KPICard
             title="Avg Completion Time"
@@ -724,6 +776,8 @@ export function Overview() {
                   "Name": r.employeeName,
                   "Department": r.department,
                   "Last Working Date": r.lastWorkingDate,
+                  "NDC Initiate Date": r.ndcInitiatedDate || "-",
+                  "Pending With": getPendingDepartments(r),
                   "Days Delayed": getDelayedDays(r)
                 }));
                 exportToExcel(mappedData, "NDC_Delayed_Cases");
@@ -755,12 +809,14 @@ export function Overview() {
                         <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">Name</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">Department</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">Last Working Date</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">NDC Initiate Date</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">Pending With</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">Days Delayed</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border bg-card">
                       {allDelayed.length === 0 ? (
-                        <tr><td colSpan={5} className="px-4 py-6 text-center text-muted-foreground">No delayed records found</td></tr>
+                        <tr><td colSpan={7} className="px-4 py-6 text-center text-muted-foreground">No delayed records found</td></tr>
                       ) : paginatedDelayed.map((record) => {
                         const days = getDelayedDays(record);
                         const badgeColor = days > 30
@@ -773,7 +829,11 @@ export function Overview() {
                             <td className="px-4 py-3 whitespace-nowrap font-medium">{record.personNumber}</td>
                             <td className="px-4 py-3 whitespace-nowrap">{record.employeeName}</td>
                             <td className="px-4 py-3">{record.department}</td>
-                            <td className="px-4 py-3 whitespace-nowrap">{record.lastWorkingDate}</td>
+                            <td className="px-4 py-3 whitespace-nowrap">{formatDate(record.lastWorkingDate)}</td>
+                            <td className="px-4 py-3 whitespace-nowrap">{formatDate(record.ndcInitiatedDate)}</td>
+                            <td className="px-4 py-3 text-sm min-w-[220px] whitespace-normal" title={getPendingDepartments(record)}>
+                              {getPendingDepartments(record)}
+                            </td>
                             <td className="px-4 py-3 whitespace-nowrap">
                               <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${badgeColor}`}>{days} days</span>
                             </td>
@@ -813,8 +873,8 @@ export function Overview() {
       </FullScreenModal>
 
       {/* Overdue Modal */}
-      <FullScreenModal open={overdueModalOpen} onClose={() => setOverdueModalOpen(false)} title="Overdue">
-        <FullScreenTable data={mockNDCData.filter(isOverdue)} title="Overdue Cases" />
+      <FullScreenModal open={overdueModalOpen} onClose={() => setOverdueModalOpen(false)} title="NDC Overdue after Exit">
+        <FullScreenTable data={mockNDCData.filter(isOverdue)} title="NDC Overdue after Exit Cases" />
       </FullScreenModal>
 
       <FilterBar

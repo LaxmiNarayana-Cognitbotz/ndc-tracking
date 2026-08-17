@@ -2,6 +2,7 @@ import { useState } from "react";
 import { NDCRecord } from "../../types";
 import { StatusBadge } from "./StatusBadge";
 import { getPendingDepartments } from "../../utils/pendingDepartments";
+import { formatDate, isDateKey } from "../../utils/dateFormatter";
 import { ChevronLeft, ChevronRight, Download, Settings } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Checkbox } from "../ui/checkbox";
@@ -96,6 +97,11 @@ export function NDCTable({
 
     if (columnKey.includes("ApprovalStatus")) {
       return <StatusBadge status={value as string} />;
+    }
+
+    if (isDateKey(columnKey) || (typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value))) {
+      if (!value) return <span className="text-muted-foreground">-</span>;
+      return formatDate(value as string);
     }
 
     if (columnKey === "fnfStatus") {

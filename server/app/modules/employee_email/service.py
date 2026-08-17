@@ -164,14 +164,14 @@ class EmployeeEmailService:
                 )
 
             inserted = 0
-            skipped = 0
+            updated = 0
             failed = 0
             errors = []
 
             try:
-                # Get all existing person numbers for duplicate checking
-                res = await db.execute(select(EmployeeEmailMaster.person_number))
-                existing_person_numbers = {p for p in res.scalars().all()}
+                # Get all existing records keyed by person_number for upsert logic
+                res = await db.execute(select(EmployeeEmailMaster))
+                existing_records = {r.person_number: r for r in res.scalars().all()}
             
                 seen_person_numbers = set()
 
@@ -227,27 +227,37 @@ class EmployeeEmailService:
                         failed += 1
                         continue
 
-                    # Duplicate check
-                    if person_num_val in existing_person_numbers or person_num_val in seen_person_numbers:
-                        skipped += 1
+                    # Handle duplicate within same file: keep the last occurrence
+                    if person_num_val in seen_person_numbers:
+                        # Already processed this person_number in this file; skip duplicate row within the file
+                        errors.append({"row": row_num, "message": f"Duplicate Person Number {person_num_val} within the file (keeping first occurrence)"})
+                        failed += 1
                         continue
 
                     seen_person_numbers.add(person_num_val)
-                    new_config = EmployeeEmailMaster(
-                        person_number=person_num_val,
-                        employee_name=employee_name_str,
-                        email=email_str
-                    )
-                    db.add(new_config)
-                    inserted += 1
 
-                if inserted > 0:
+                    # Upsert: update existing record or insert new one
+                    if person_num_val in existing_records:
+                        existing = existing_records[person_num_val]
+                        existing.employee_name = employee_name_str
+                        existing.email = email_str
+                        updated += 1
+                    else:
+                        new_config = EmployeeEmailMaster(
+                            person_number=person_num_val,
+                            employee_name=employee_name_str,
+                            email=email_str
+                        )
+                        db.add(new_config)
+                        inserted += 1
+
+                if inserted > 0 or updated > 0:
                     await db.commit()
 
                 return {
                     "success": True,
                     "inserted": inserted,
-                    "skipped": skipped,
+                    "updated": updated,
                     "failed": failed,
                     "errors": errors
                 }

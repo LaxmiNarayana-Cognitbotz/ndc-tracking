@@ -64,7 +64,7 @@ export function RMEmailConfigurationPage() {
 
   // Pagination states
   const [page, setPage] = useState(1);
-  const limit = 10;
+  const limit = 20;
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
 

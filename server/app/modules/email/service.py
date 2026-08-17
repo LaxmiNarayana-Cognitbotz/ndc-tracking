@@ -106,18 +106,22 @@ class EmailService:
                 title = "F&F Open Cases Report"
                 intro = f"Please find below the list of the F&F open cases identified as of today ({EmailService._fmt_date(date.today())})."
                 col_5 = "F&F Status"
+                outro = "Please review these records and take the necessary actions."
             elif reminder_type == "fnf_revision":
                 title = "F&F Revision Required Cases Report"
                 intro = f"Please find below the list of the F&F revision required cases identified as of today ({EmailService._fmt_date(date.today())})."
                 col_5 = "F&F Status"
+                outro = "Please review these records and take the necessary actions."
             elif reminder_type == "fnf_delayed":
                 title = "F&F Delayed Cases Report"
                 intro = f"Please find below the list of the F&F delayed cases identified as of today ({EmailService._fmt_date(date.today())})."
                 col_5 = "Days Delayed"
+                outro = "Kindly review and expedite the pending actions to ensure timely closure."
             else:
-                title = "NDC Delayed Cases – Top 10 Report"
-                intro = f"Please find below the list of the <b>Top {min(len(records), 10)} delayed cases</b> identified as of today ({EmailService._fmt_date(date.today())})."
+                title = "NDC Delayed Cases Report"
+                intro = f"Please find below the top delayed NDC cases identified as of {EmailService._fmt_date(date.today())}."
                 col_5 = "Days Delayed"
+                outro = "Kindly review and expedite the pending actions to ensure timely closure."
 
             html = f"""<!DOCTYPE html>
         <html>
@@ -138,7 +142,6 @@ class EmailService:
             .content {{ padding: 16px 12px !important; font-size: 13px !important; }}
             .footer {{ padding: 16px 12px !important; font-size: 11.5px !important; }}
             th, td {{ padding: 8px 6px !important; font-size: 12px !important; }}
-            .note {{ padding: 12px !important; font-size: 12px !important; }}
           }}
         </style>
         </head>
@@ -157,7 +160,6 @@ class EmailService:
                     <p style="margin:0 0 16px 0;">Hello Team,</p>
                     <p style="margin:0 0 16px 0;">
                       {intro}
-                      These records require attention for closure.
                     </p>
                     <div class="table-responsive" style="width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:15px;">
                       <table width="100%" border="0" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;min-width:480px;">
@@ -175,19 +177,15 @@ class EmailService:
                         </tbody>
                       </table>
                     </div>
-                    <div class="note" style="background-color:#fff7e6;padding:16px;margin-top:25px;border-left:4px solid #ffb020;font-family:Arial,sans-serif;font-size:13.5px;color:#666666;line-height:1.5;">
-                      Please review the above cases and take the required actions at the earliest
-                      to avoid further aging and ensure timely closure.
-                    </div>
-                    <p style="margin:20px 0 16px 0;">If any of these records have already been processed, kindly ignore this notification.</p>
-                    <p style="margin:0;">Thank you for your support.</p>
+                    <p style="margin:20px 0 0 0;font-family:Arial,sans-serif;font-size:14px;line-height:1.6;color:#333333;">
+                      {outro}
+                    </p>
                   </td>
                 </tr>
                 <tr>
                   <td class="footer" bgcolor="#fafafa" style="padding:25px 30px;background-color:#fafafa;color:#666666;border-top:1px solid #ececec;font-family:Arial,sans-serif;font-size:12.5px;line-height:1.5;">
                     Regards,<br>
-                    <b style="color:#333333;">Automation Team</b><br>
-                    NDC Monitoring System
+                    <b style="color:#333333;">Team HR</b>
                   </td>
                 </tr>
               </table>
@@ -212,7 +210,7 @@ class EmailService:
         records: list[dict], recipient: str | None = None, reminder_type: str = "ndc_delayed"
     ) -> dict:
         """
-        Send the NDC delayed-cases reminder email with the top 10 delayed records.
+        Send the NDC delayed-cases reminder email with all delayed records.
 
         Args:
             records: Top-N delayed records (dicts with keys: person_number,
@@ -261,7 +259,7 @@ class EmailService:
                 subject_line = f"{subj_title} – {len(records)} Records ({EmailService._fmt_date(date.today())})"
             else:
                 subj_title = "NDC Delayed Cases Reminder"
-                subject_line = f"{subj_title} – Top {min(len(records), 10)} Records ({EmailService._fmt_date(date.today())})"
+                subject_line = f"Reminder: Top Delayed NDC Cases ({EmailService._fmt_date(date.today())})"
 
             msg = MIMEMultipart("alternative")
             msg["Subject"] = subject_line
@@ -348,8 +346,8 @@ class EmailService:
                 <tr>
                   <td class="content" style="padding:32px 24px;color:#334155;font-family:Arial,sans-serif;font-size:14px;line-height:1.6;">
                     <h2 style="color:#0f766e;font-size:18px;font-weight:600;margin-top:0;margin-bottom:20px;border-bottom:1px solid #e2e8f0;padding-bottom:10px;font-family:Arial,sans-serif;">Full &amp; Final Settlement Details</h2>
-                    <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#475569;font-family:Arial,sans-serif;">Dear {record.get('employee_name')},</p>
-                    <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#475569;font-family:Arial,sans-serif;">Please find attached your Full &amp; Final (F&amp;F) settlement document along with the details of your exit clearance below:</p>
+                    <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#475569;font-family:Arial,sans-serif;">Dear {record.get('employee_name') or 'Team'},</p>
+                    <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#475569;font-family:Arial,sans-serif;">Please find attached your Full &amp; Final Settlement documents for your reference.</p>
                 
                     <div class="table-responsive" style="width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;margin:20px 0;">
                       <table class="details-table" width="100%" border="0" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;">
@@ -389,14 +387,15 @@ class EmailService:
                     </div>
                 
                     <p style="margin:20px 0 0;font-size:14px;line-height:1.6;color:#475569;font-family:Arial,sans-serif;">
-                      Please review the attached documents. If you notice any issues or if anything appears to be incorrect, kindly check and verify it, and let us know.
+                      Kindly review the details and inform us if you notice any discrepancy or have any queries.<br>
+                      Wishing you success in your future endeavors.
                     </p>
                   </td>
                 </tr>
                 <tr>
                   <td class="footer" bgcolor="#f8fafc" style="background-color:#f8fafc;padding:20px 24px;border-top:1px solid #e2e8f0;font-family:Arial,sans-serif;font-size:12.5px;color:#64748b;line-height:1.5;">
                     Regards,<br>
-                    <strong style="color:#475569;">NDC Monitoring System</strong>
+                    <strong style="color:#475569;">Team HR</strong>
                   </td>
                 </tr>
               </table>
@@ -679,10 +678,9 @@ class EmailService:
                   <td style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;">{lwd}</td>
                 </tr>"""
 
-            greeting = f"Dear {manager_name}," if manager_name else "Hello,"
+            greeting = f"Dear {manager_name}," if manager_name and "Conflict Redirected" not in manager_name else "Dear Team,"
             warning_html = ""
             if manager_name and "Conflict Redirected" in manager_name:
-                greeting = "Dear HR Team,"
                 clean_name = manager_name.replace(" (Conflict Redirected)", "")
                 warning_html = f"""
                 <p style="color: #d9534f; font-family: Arial, sans-serif; font-size: 14px; font-weight: bold; background-color: #fdf7f7; border: 1px solid #d9534f; padding: 12px; border-radius: 5px; margin-bottom: 15px; margin-top: 0;">
@@ -690,27 +688,35 @@ class EmailService:
                 </p>
                 """
 
+            clean_dept = stage_name.replace(" Approval", "").replace(" Approvals", "").replace(" Report", "").strip()
+
             if is_tomorrow:
                 tomorrow_str = EmailService._fmt_date(date.today() + timedelta(days=1))
                 intro_paragraph = f"""
-                <p style="margin: 0 0 16px 0;">The following users are currently pending in the <b>{stage_name}</b> Approval stage.</p>
-                <p style="margin: 0 0 16px 0;">These records have their last working date set for tomorrow ({tomorrow_str}):</p>
+                <p style="margin: 0 0 16px 0;">The following records are currently pending at the <b>{clean_dept} Approval</b> stage and require your attention:</p>
+                <div style="background-color:#fff7e6;padding:14px 16px;margin:0 0 16px 0;border-left:4px solid #ffb020;font-family:Arial,sans-serif;font-size:13.5px;color:#666666;line-height:1.5;">
+                  <b>Note:</b> The employees listed below have their Last Working Date scheduled for tomorrow ({tomorrow_str}).
+                </div>
                 """
-                subject = f"Pending {stage_name} Approvals Report - Action Required Tomorrow"
-                header_title = f"Pending {stage_name} Approval Records"
+                subject = f"Action Required: Pending {clean_dept} Approvals (Due Tomorrow)"
+                header_title = f"Pending {clean_dept} Approval Records"
+                outro = "Kindly review the above records and complete the necessary approvals at the earliest to avoid delays in the NDC process."
             else:
-                if stage_name == "F&F Team":
-                    intro_paragraph = "<p style=\"margin: 0 0 16px 0;\">The following users are currently on the <b>F&F Open</b> list.</p>"
+                if clean_dept in ("F&F Team", "F&F Open"):
+                    intro_paragraph = "<p style=\"margin: 0 0 16px 0;\">The following users are currently on the <b>F&F Open</b> list and require your attention:</p>"
                     subject = "F&F Open List Report - Action Required"
                     header_title = "F&F Open List Records"
-                elif stage_name == "F&F Revision Required":
-                    intro_paragraph = "<p style=\"margin: 0 0 16px 0;\">The following users currently require <b>F&F Revision</b>.</p>"
+                    outro = "Kindly review the above records and complete the necessary actions at the earliest to avoid delays in the process."
+                elif clean_dept in ("F&F Revision Required", "F&F Revision"):
+                    intro_paragraph = "<p style=\"margin: 0 0 16px 0;\">The following users currently require <b>F&F Revision</b> and require your attention:</p>"
                     subject = "F&F Revision Required - Action Required"
                     header_title = "F&F Revision Required Records"
+                    outro = "Kindly review the above records and complete the necessary actions at the earliest to avoid delays in the process."
                 else:
-                    intro_paragraph = f"<p style=\"margin: 0 0 16px 0;\">The following users are currently pending in the <b>{stage_name}</b> Approval stage.</p>"
-                    subject = f"Pending {stage_name} Approvals Report - Action Required"
-                    header_title = f"Pending {stage_name} Approval Records"
+                    intro_paragraph = f"<p style=\"margin: 0 0 16px 0;\">The following records are currently pending at the <b>{clean_dept} Approval</b> stage and require your attention:</p>"
+                    subject = f"Action Required: Pending {clean_dept} Approvals"
+                    header_title = f"Pending {clean_dept} Approval Records"
+                    outro = "Kindly review the above records and complete the necessary approvals at the earliest to avoid delays in the NDC process."
 
             html_body = f"""<!DOCTYPE html>
         <html>
@@ -763,7 +769,15 @@ class EmailService:
                         </tbody>
                       </table>
                     </div>
-                    <p style="margin:20px 0 0 0;">Please review these records and take the necessary actions.</p>
+                    <p style="margin:20px 0 0 0;font-family:Arial,sans-serif;font-size:14px;line-height:1.6;color:#333333;">
+                      {outro}
+                    </p>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="footer" bgcolor="#fafafa" style="padding:25px 30px;background-color:#fafafa;color:#666666;border-top:1px solid #ececec;font-family:Arial,sans-serif;font-size:12.5px;line-height:1.5;">
+                    Regards,<br>
+                    <b style="color:#333333;">Team HR</b>
                   </td>
                 </tr>
               </table>
@@ -868,7 +882,7 @@ class EmailService:
                 </tr>
                 <tr>
                   <td class="content" style="padding:30px;color:#333333;font-family:Arial,sans-serif;font-size:14px;line-height:1.7;">
-                    <p style="margin:0 0 16px 0;">Dear HR Team,</p>
+                    <p style="margin:0 0 16px 0;">Dear Team,</p>
                     <p style="color: #d9534f; font-weight: bold; background-color: #fdf7f7; border: 1px solid #d9534f; padding: 12px; border-radius: 5px; margin-bottom: 15px; margin-top:0;">
                       Warning: The following pending RM approvals have been redirected to HR because their Reporting Managers have multiple conflicting email configurations in the system. Please resolve these duplicates in the <b>rm_email_configuration</b> database table.
                     </p>
@@ -889,6 +903,12 @@ class EmailService:
                       </table>
                     </div>
                     <p style="margin:20px 0 0 0;">Please review these records and take the necessary actions.</p>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="footer" bgcolor="#fafafa" style="padding:25px 30px;background-color:#fafafa;color:#666666;border-top:1px solid #ececec;font-family:Arial,sans-serif;font-size:12.5px;line-height:1.5;">
+                    Regards,<br>
+                    <b style="color:#333333;">Team HR</b>
                   </td>
                 </tr>
               </table>
@@ -1474,7 +1494,7 @@ class EmailService:
                   <h1>Adani HR NDC Tracking</h1>
                 </div>
                 <div class="body">
-                  <p>Hello,</p>
+                  <p>Dear Team,</p>
                   <p>We received a request to reset your password for your <strong>Adani HR NDC Tracking</strong> account.</p>
                   <p>Click the button below to set a new password:</p>
                   <div class="btn-container">
@@ -1485,6 +1505,10 @@ class EmailService:
                   <div class="warning">
                     ⏳ This password reset link is valid for <strong>30 minutes</strong>. If you did not request this, please ignore this email.
                   </div>
+                  <p style="margin-top: 20px; font-size: 14px; color: #475569;">
+                    Regards,<br>
+                    <strong>Team HR</strong>
+                  </p>
                 </div>
                 <div class="footer">
                   &copy; {datetime.now().year} Adani HR NDC Tracking Platform. All rights reserved.

@@ -55,7 +55,7 @@ interface RowError {
 interface ImportSummary {
   success: boolean;
   inserted: number;
-  skipped: number;
+  updated: number;
   failed: number;
   errors: RowError[];
 }
@@ -66,7 +66,7 @@ export function EmployeeEmailMasterPage() {
 
   // Pagination states
   const [page, setPage] = useState(1);
-  const limit = 10;
+  const limit = 20;
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
 
@@ -180,11 +180,15 @@ export function EmployeeEmailMasterPage() {
       },
     })
     .then((res) => {
-      setImportSummary(res.data);
-      if (res.data.failed > 0) {
-        toast.warning(`Import completed with ${res.data.failed} row error(s).`);
+      const result = res.data.data || res.data;
+      setImportSummary(result);
+      if (result.failed > 0) {
+        toast.warning(`Import completed with ${result.failed} row error(s).`);
       } else {
-        toast.success(`Successfully imported ${res.data.inserted} record(s).`);
+        const parts = [];
+        if (result.inserted > 0) parts.push(`${result.inserted} inserted`);
+        if (result.updated > 0) parts.push(`${result.updated} updated`);
+        toast.success(`Successfully processed ${parts.join(', ')} record(s).`);
       }
       setFileToUpload(null);
       fetchData();
@@ -548,15 +552,15 @@ export function EmployeeEmailMasterPage() {
               <div className="space-y-4 pt-4 border-t border-border">
                 <div className="grid grid-cols-3 gap-3 text-center">
                   <div className="p-3 bg-green-50/50 border border-green-200 rounded-[4px] dark:bg-green-950/20 dark:border-green-900">
-                    <div className="text-xl font-bold text-green-600 dark:text-green-400">{importSummary.inserted}</div>
+                    <div className="text-xl font-bold text-green-600 dark:text-green-400">{importSummary.inserted || 0}</div>
                     <div className="text-xs text-muted-foreground font-medium">Inserted</div>
                   </div>
-                  <div className="p-3 bg-blue-50/50 border border-blue-200 rounded-[4px] dark:bg-blue-950/20 dark:border-blue-900">
-                    <div className="text-xl font-bold text-blue-600 dark:text-blue-400">{importSummary.skipped}</div>
-                    <div className="text-xs text-muted-foreground font-medium">Skipped</div>
+                  <div className="p-3 bg-amber-50/50 border border-amber-200 rounded-[4px] dark:bg-amber-950/20 dark:border-amber-900">
+                    <div className="text-xl font-bold text-amber-600 dark:text-amber-400">{importSummary.updated || 0}</div>
+                    <div className="text-xs text-muted-foreground font-medium">Updated</div>
                   </div>
                   <div className="p-3 bg-red-50/50 border border-red-200 rounded-[4px] dark:bg-red-950/20 dark:border-red-900">
-                    <div className="text-xl font-bold text-red-600 dark:text-red-400">{importSummary.failed}</div>
+                    <div className="text-xl font-bold text-red-600 dark:text-red-400">{importSummary.failed || 0}</div>
                     <div className="text-xs text-muted-foreground font-medium">Failed</div>
                   </div>
                 </div>

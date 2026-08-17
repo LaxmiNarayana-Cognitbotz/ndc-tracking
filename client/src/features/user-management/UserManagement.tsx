@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../../context/AuthContext";
 import api from "../../lib/axios";
+import { formatDate } from "../../utils/dateFormatter";
 import {
   Trash2, Shield, Mail, Key,
   Loader2, Search, RefreshCw, Info, X, Plus, Pencil, Eye, EyeOff
@@ -336,9 +337,7 @@ export function UserManagement() {
                     <td className="px-4 py-2.5">{getRoleBadge(user.role)}</td>
                     <td className="px-4 py-2.5">{getStatusBadge(user.status)}</td>
                     <td className="px-4 py-2.5 text-sm text-muted-foreground whitespace-nowrap">
-                      {user.requested_at ? new Date(user.requested_at).toLocaleDateString("en-IN", {
-                        day: "2-digit", month: "short", year: "numeric"
-                      }) : "N/A"}
+                      {formatDate(user.requested_at)}
                     </td>
                     <td className="px-4 py-2.5">
                       <div className="flex items-center gap-1.5">
@@ -368,7 +367,7 @@ export function UserManagement() {
         {/* Footer */}
         <div className="px-6 py-4 border-t border-border flex items-center justify-between bg-card">
           <div className="text-sm text-muted-foreground">
-            Showing {filteredUsers.length} of {users.length} users
+            Showing {filteredUsers.length} of {users.length} records
           </div>
         </div>
       </div>

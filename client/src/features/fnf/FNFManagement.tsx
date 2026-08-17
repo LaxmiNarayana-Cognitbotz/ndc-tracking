@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import axios from "../../lib/axios";
 import { NDCRecord } from "../../types";
 import { exportToExcel } from "../../utils/excelExport";
+import { formatDate } from "../../utils/dateFormatter";
 import { PPTDownloadButton } from "../../components/common/PPTDownloadButton";
 import { FullScreenModal } from "../../components/common/FullScreenModal";
 import { LoadingScreen } from "../../components/common/LoadingScreen";
@@ -107,7 +108,7 @@ export function FNFManagement() {
     return filtered;
   }, [eligibleRecords, statusFilter, searchQuery]);
 
-  const itemsPerPage = 10;
+  const itemsPerPage = 20;
   const totalPages = Math.max(1, Math.ceil(filteredData.length / itemsPerPage));
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedData = filteredData.slice(startIndex, startIndex + itemsPerPage);
@@ -278,7 +279,7 @@ export function FNFManagement() {
     { type: "avgTAT" as const, label: "F&F TAT (In Days)", value: fnfStats.avgTAT, icon: TrendingUp, color: "text-purple-600" },
   ];
 
-  const fnfDelayedItemsPerPage = 10;
+  const fnfDelayedItemsPerPage = 20;
   const fnfDelayedTotalPages = Math.max(1, Math.ceil(fnfDelayedData.length / fnfDelayedItemsPerPage));
   const fnfDelayedStartIndex = (fnfDelayedCurrentPage - 1) * fnfDelayedItemsPerPage;
   const fnfDelayedPaginated = fnfDelayedData.slice(fnfDelayedStartIndex, fnfDelayedStartIndex + fnfDelayedItemsPerPage);
@@ -393,10 +394,11 @@ export function FNFManagement() {
                   "Person number": r.personNumber,
                   "Employee name": r.employeeName,
                   "Department": r.department,
-                  "Last working date": r.lastWorkingDate,
+                  "Last working date": formatDate(r.lastWorkingDate),
+                  "NDC Final Cleared Date": formatDate(r.ndcCompletedDate),
                   "F&F status": getFNFStatusLabel(r),
                   "NDC status": r.ndcStage === "NDC Completed" ? "Completed" : (r.ndcStage || "Recovery Pending"),
-                  "F&F completed date": r.fnfCompletedDate,
+                  "F&F completed date": formatDate(r.fnfCompletedDate),
                 }));
                 exportToExcel(mappedData, "FNF_Records");
               }}
@@ -416,6 +418,7 @@ export function FNFManagement() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Employee name</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Department</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Last working date</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">NDC Final Cleared Date</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">F&amp;F status</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">F&amp;F completed date</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">NDC status</th>
@@ -428,9 +431,10 @@ export function FNFManagement() {
                   <td className="px-4 py-3 text-sm font-medium">{record.personNumber}</td>
                   <td className="px-4 py-3 text-sm">{record.employeeName}</td>
                   <td className="px-4 py-3 text-sm">{record.department}</td>
-                  <td className="px-4 py-3 text-sm whitespace-nowrap">{record.lastWorkingDate}</td>
+                  <td className="px-4 py-3 text-sm whitespace-nowrap">{formatDate(record.lastWorkingDate)}</td>
+                  <td className="px-4 py-3 text-sm whitespace-nowrap">{formatDate(record.ndcCompletedDate)}</td>
                   <td className="px-4 py-3 text-sm">{getFNFStatusBadge(record)}</td>
-                  <td className="px-4 py-3 text-sm whitespace-nowrap">{record.fnfCompletedDate || "-"}</td>
+                  <td className="px-4 py-3 text-sm whitespace-nowrap">{formatDate(record.fnfCompletedDate)}</td>
                   <td className="px-4 py-3 text-sm">{getNDCStatusBadge(record)}</td>
                   <td className="px-4 py-3 text-sm">
                     <div className="flex gap-2 items-center">
@@ -469,7 +473,7 @@ export function FNFManagement() {
               ))}
               {filteredData.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">No F&amp;F records found</td>
+                  <td colSpan={9} className="px-4 py-8 text-center text-muted-foreground">No F&amp;F records found</td>
                 </tr>
               )}
             </tbody>
@@ -534,10 +538,11 @@ export function FNFManagement() {
                   "Person number": r.personNumber,
                   "Name": r.employeeName,
                   "Department": r.department,
-                  "Last working date": r.lastWorkingDate,
+                  "Last working date": formatDate(r.lastWorkingDate),
+                  "NDC Final Cleared Date": formatDate(r.ndcCompletedDate),
                   "NDC stage": r.ndcStage,
                   "F&F status": getFNFStatusLabel(r),
-                  "F&F completed date": r.fnfCompletedDate || "-"
+                  "F&F completed date": formatDate(r.fnfCompletedDate)
                 }));
                 exportToExcel(mappedData, kpiModalData.title || "KPI_Records");
               }}
@@ -564,6 +569,7 @@ export function FNFManagement() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Name</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Department</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Last working date</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">NDC Final Cleared Date</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">NDC stage</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">F&amp;F status</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">F&amp;F completed date</th>
@@ -575,15 +581,16 @@ export function FNFManagement() {
                       <td className="px-4 py-3 whitespace-nowrap">{record.personNumber}</td>
                       <td className="px-4 py-3 whitespace-nowrap">{record.employeeName}</td>
                       <td className="px-4 py-3">{record.department}</td>
-                      <td className="px-4 py-3 whitespace-nowrap">{record.lastWorkingDate}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">{formatDate(record.lastWorkingDate)}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">{formatDate(record.ndcCompletedDate)}</td>
                       <td className="px-4 py-3 whitespace-nowrap">{record.ndcStage}</td>
                       <td className="px-4 py-3">{getFNFStatusBadge(record)}</td>
-                      <td className="px-4 py-3 whitespace-nowrap">{record.fnfCompletedDate || "-"}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">{formatDate(record.fnfCompletedDate)}</td>
                     </tr>
                   ))}
                   {kpiModalData.data.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">No records found</td>
+                      <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">No records found</td>
                     </tr>
                   )}
                 </tbody>
@@ -829,8 +836,9 @@ export function FNFManagement() {
                   "Person Number": r.personNumber,
                   "Name": r.employeeName,
                   "Department": r.department,
-                  "Last Working Date": r.lastWorkingDate,
-                  "NDC Cleared Date": r.ndcCompletedDate || "-",
+                  "Last Working Date": formatDate(r.lastWorkingDate),
+                  "NDC Initiate Date": formatDate(r.ndcInitiatedDate),
+                  "NDC Final Cleared Date": formatDate(r.ndcCompletedDate || r.gccHrApprovalDate),
                   "F&F Status": r.fnfStatus,
                   "Days Delayed": Math.ceil((new Date().getTime() - new Date(r.lastWorkingDate).getTime()) / (1000 * 60 * 60 * 24))
                 }));
@@ -857,14 +865,15 @@ export function FNFManagement() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">Name</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">Department</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">Last Working Date</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">NDC Cleared Date</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">NDC Initiate Date</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">NDC Final Cleared Date</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">F&amp;F Status</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">Days Delayed</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-orange-100 bg-card">
                   {fnfDelayedData.length === 0 ? (
-                    <tr><td colSpan={7} className="px-4 py-6 text-center text-muted-foreground">No records found</td></tr>
+                    <tr><td colSpan={8} className="px-4 py-6 text-center text-muted-foreground">No records found</td></tr>
                   ) : fnfDelayedPaginated.map((record) => {
                     const delayDays = Math.ceil((new Date().getTime() - new Date(record.lastWorkingDate).getTime()) / (1000 * 60 * 60 * 24));
                     return (
@@ -872,8 +881,9 @@ export function FNFManagement() {
                         <td className="px-4 py-3 whitespace-nowrap font-medium">{record.personNumber}</td>
                         <td className="px-4 py-3 whitespace-nowrap">{record.employeeName}</td>
                         <td className="px-4 py-3">{record.department}</td>
-                        <td className="px-4 py-3 whitespace-nowrap">{record.lastWorkingDate}</td>
-                        <td className="px-4 py-3 whitespace-nowrap">{record.ndcCompletedDate || "-"}</td>
+                        <td className="px-4 py-3 whitespace-nowrap">{formatDate(record.lastWorkingDate)}</td>
+                        <td className="px-4 py-3 whitespace-nowrap">{formatDate(record.ndcInitiatedDate)}</td>
+                        <td className="px-4 py-3 whitespace-nowrap">{formatDate(record.ndcCompletedDate || record.gccHrApprovalDate)}</td>
                         <td className="px-4 py-3">
                           <span className="inline-flex items-center px-2 py-1 rounded-[4px] text-xs font-medium bg-orange-100 text-orange-700 whitespace-nowrap">{record.fnfStatus}</span>
                         </td>

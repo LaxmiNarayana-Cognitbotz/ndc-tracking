@@ -159,7 +159,7 @@ class EmailRecipientService:
                 )
             else:
                 # Default: ndc_delayed
-                # Fetch all overdue non-completed records
+                # Fetch overdue non-completed records delayed by > 30 days (Top Delayed Cases, matching dashboard card)
                 result = await db.execute(
                     select(NdcRecord).where(
                         NdcRecord.ndc_stage != "NDC Completed",
@@ -168,16 +168,14 @@ class EmailRecipientService:
                     )
                 )
                 records = result.scalars().all()
+                top_delayed_records = [r for r in records if EmailService._days_delayed(r.last_working_date) > 30]
                 sorted_records = sorted(
-                    records,
+                    top_delayed_records,
                     key=lambda r: EmailService._days_delayed(r.last_working_date),
                     reverse=True,
                 )
 
-            if payload_type in ("fnf_open", "fnf_revision", "fnf_delayed"):
-                selected_records = sorted_records
-            else:
-                selected_records = sorted_records[:10]
+            selected_records = sorted_records
 
             records_payload = [
                 {

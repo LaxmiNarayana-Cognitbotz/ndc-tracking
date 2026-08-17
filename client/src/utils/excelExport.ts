@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { formatDate, isDateKey } from './dateFormatter';
 
 const headerMapping: Record<string, string> = {
   // id: "ID",
@@ -62,12 +63,23 @@ export const exportToExcel = (data: any[], filename: string) => {
     for (const key in item) {
       if (key === 'id') continue; // Exclude the id field from export
 
+      let val = item[key];
+      if (val !== null && val !== undefined) {
+        if (typeof val === 'string' && val.trim() !== '') {
+          if (isDateKey(key) || /^\d{4}-\d{2}-\d{2}/.test(val.trim())) {
+            val = formatDate(val);
+          }
+        } else if (val instanceof Date) {
+          val = formatDate(val);
+        }
+      }
+
       if (headerMapping[key]) {
-        formattedItem[headerMapping[key]] = item[key];
+        formattedItem[headerMapping[key]] = val;
       } else {
         // Fallback: capitalize the first letter and separate camelCase
         const titleCaseKey = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
-        formattedItem[titleCaseKey] = item[key];
+        formattedItem[titleCaseKey] = val;
       }
     }
     return formattedItem;

@@ -67,7 +67,7 @@ export function EmailConfig() {
 
   // Pagination states
   const [page, setPage] = useState(1);
-  const limit = 10;
+  const limit = 20;
 
   // Search state
   const [search, setSearch] = useState("");

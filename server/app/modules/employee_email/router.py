@@ -22,7 +22,7 @@ async def create_employee_email_configuration(config: EmployeeEmailCreate, db: A
 
 
 @router.get("/employee-email-master")
-async def get_employee_email_configurations(page: int = 1, limit: int = 10, search: str = "", db: AsyncSession = Depends(get_db)):
+async def get_employee_email_configurations(page: int = 1, limit: int = 20, search: str = "", db: AsyncSession = Depends(get_db)):
     try:
         result = await EmployeeEmailService.get_employee_emails_paginated(page, limit, search, db)
         return result

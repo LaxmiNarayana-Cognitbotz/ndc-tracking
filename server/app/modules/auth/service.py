@@ -180,12 +180,13 @@ class AuthService:
             body_html = f"""
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
                 <h2 style="color: #003b70; margin-bottom: 16px;">NDC Tracking System - Login Verification</h2>
-                <p>Hello <strong>{user_access.name or user_access.email}</strong>,</p>
+                <p>Dear <strong>{user_access.name or user_access.email or 'Team'}</strong>,</p>
                 <p>Your one-time verification code (OTP) for login is:</p>
                 <div style="background-color: #f0f4f8; padding: 16px; text-align: center; font-size: 28px; font-weight: bold; letter-spacing: 6px; color: #003b70; border-radius: 6px; margin: 20px 0;">
                     {otp_code}
                 </div>
                 <p style="color: #666; font-size: 14px;">This code will expire in 10 minutes. If you did not attempt to log in, please ignore this email.</p>
+                <p style="font-size: 0.85em; color: #666; margin-top: 20px;">Regards,<br><b>Team HR</b></p>
             </div>
             """
             await AuthService.send_auth_email(user_access.email, "NDC Tracking - Login OTP Code", body_html)
@@ -286,12 +287,13 @@ class AuthService:
             body_html = f"""
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
                 <h2 style="color: #003b70; margin-bottom: 16px;">NDC Tracking System - Login Verification</h2>
-                <p>Hello <strong>{user_access.name or user_access.email}</strong>,</p>
+                <p>Dear <strong>{user_access.name or user_access.email or 'Team'}</strong>,</p>
                 <p>Your new one-time verification code (OTP) for login is:</p>
                 <div style="background-color: #f0f4f8; padding: 16px; text-align: center; font-size: 28px; font-weight: bold; letter-spacing: 6px; color: #003b70; border-radius: 6px; margin: 20px 0;">
                     {otp_code}
                 </div>
                 <p style="color: #666; font-size: 14px;">This code will expire in 10 minutes. If you did not request this OTP, please ignore this email.</p>
+                <p style="font-size: 0.85em; color: #666; margin-top: 20px;">Regards,<br><b>Team HR</b></p>
             </div>
             """
             await AuthService.send_auth_email(user_access.email, "NDC Tracking - New Login OTP Code", body_html)
@@ -584,7 +586,7 @@ class AuthService:
                 <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
                     <div style="max-width: 600px; margin: 0 auto; border: 1px solid #ddd; padding: 20px; border-radius: 8px;">
                         <h2 style="color: #0b3d91; border-bottom: 2px solid #0b3d91; padding-bottom: 10px;">NDC System — New Access Request</h2>
-                        <p>Hello Super Admin,</p>
+                        <p>Dear Team,</p>
                         <p>A new user has logged in via SSO for the first time and is requesting administrative access to the <b>NDC &amp; F&amp;F Tracking System</b>.</p>
                     
                         <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
@@ -609,7 +611,7 @@ class AuthService:
                         </div>
                         <p style="font-size: 0.9em; color: #777;">This email link is single-use and will be invalidated once clicked.</p>
                         <hr style="border: 0; border-top: 1px solid #eee;" />
-                        <p style="font-size: 0.85em; color: #999;">Regards,<br><b>NDC Authentication Guard</b></p>
+                        <p style="font-size: 0.85em; color: #999;">Regards,<br><b>Team HR</b></p>
                     </div>
                 </body>
                 </html>
@@ -743,14 +745,14 @@ class AuthService:
             <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
                 <div style="max-width: 600px; margin: 0 auto; border: 1px solid #ddd; padding: 20px; border-radius: 8px;">
                     <h2 style="color: #28a745; border-bottom: 2px solid #28a745; padding-bottom: 10px;">NDC System — Access Granted</h2>
-                    <p>Hello {name},</p>
+                    <p>Dear {name or 'Team'},</p>
                     <p>Your access request to the <b>NDC &amp; F&amp;F Tracking and Reporting System</b> has been approved by the administrator.</p>
                     <p>You can now log in to the portal using your Adani corporate account.</p>
                     <div style="margin: 30px 0; text-align: center;">
                         <a href="/ndc" style="background-color: #28a745; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold;">GO TO NDC TRACKING SYSTEM</a>
                     </div>
                     <hr style="border: 0; border-top: 1px solid #eee;" />
-                    <p style="font-size: 0.85em; color: #999;">Regards,<br><b>NDC System Administrator</b></p>
+                    <p style="font-size: 0.85em; color: #999;">Regards,<br><b>Team HR</b></p>
                 </div>
             </body>
             </html>
@@ -835,11 +837,11 @@ class AuthService:
             <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
                 <div style="max-width: 600px; margin: 0 auto; border: 1px solid #ddd; padding: 20px; border-radius: 8px;">
                     <h2 style="color: #dc3545; border-bottom: 2px solid #dc3545; padding-bottom: 10px;">NDC System — Access Denied</h2>
-                    <p>Hello {name},</p>
+                    <p>Dear {name or 'Team'},</p>
                     <p>Your access request to the <b>NDC &amp; F&amp;F Tracking and Reporting System</b> has been declined.</p>
                     <p>If you believe this is a mistake, please contact the system administrator for assistance.</p>
                     <hr style="border: 0; border-top: 1px solid #eee;" />
-                    <p style="font-size: 0.85em; color: #999;">Regards,<br><b>NDC System Administrator</b></p>
+                    <p style="font-size: 0.85em; color: #999;">Regards,<br><b>Team HR</b></p>
                 </div>
             </body>
             </html>

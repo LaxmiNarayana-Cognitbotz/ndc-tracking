@@ -52,7 +52,7 @@ async def delete_email_recipient(id: int, db: AsyncSession = Depends(get_db)):
 
 @router.post("/send-delayed-reminder")
 async def send_delayed_reminder_email(payload: DelayedReminderRequest, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
-    """Send a reminder email for the top 10 delayed/overdue cases (NDC or F&F)."""
+    """Send a reminder email for delayed/overdue cases (NDC or F&F)."""
     try:
         return await EmailRecipientService.prepare_and_send_delayed_reminder(payload.type, payload.email, background_tasks, db)
     except HTTPException:
