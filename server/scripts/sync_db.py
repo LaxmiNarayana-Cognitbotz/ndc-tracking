@@ -12,6 +12,8 @@ def run_sync():
     # Resolve the absolute path to the root 'server' directory
     BASE_DIR = Path(__file__).resolve().parent.parent
     os.chdir(BASE_DIR)
+    if str(BASE_DIR) not in sys.path:
+        sys.path.insert(0, str(BASE_DIR))
     
     # Ensure alembic/versions directory exists
     versions_dir = BASE_DIR / "alembic" / "versions"
