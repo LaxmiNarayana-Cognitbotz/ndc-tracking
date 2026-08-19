@@ -57,21 +57,40 @@ async def update_fnf_status_route(record_id: int, body: FnfUpdateRequest, backgr
         # Send instant email to F&F Team when revision is marked with a comment
         if body.is_fnf_revision and body.fnf_revision_comment:
             try:
-                # Look up F&F Team recipient from email_recipients table
+                # Look up all F&F Team recipients from email_recipients table
                 from config.database import async_session
+                from sqlalchemy import func
+                ff_recipients: list[str] = []
                 async with async_session() as session:
                     result = await session.execute(
-                        select(EmailRecipient).where(EmailRecipient.department == "F&F Team")
+                        select(EmailRecipient).where(
+                            func.lower(func.trim(EmailRecipient.department)).in_(["f&f team", "fnf team", "f&f", "fnf"])
+                        )
                     )
-                    ff_config = result.scalar_one_or_none()
-                    ff_recipient = ff_config.email.strip() if ff_config and ff_config.email else None
+                    rows = result.scalars().all()
+                    for r in rows:
+                        if r.email:
+                            for addr in r.email.replace(";", ",").split(","):
+                                clean = addr.strip()
+                                if clean and clean not in ff_recipients:
+                                    ff_recipients.append(clean)
 
-                if ff_recipient:
+                # Fallback to environment variables if no DB recipient configured
+                if not ff_recipients:
+                    import os
+                    env_fallback = os.getenv("FNF_EMAIL_RECIPIENT") or os.getenv("EMAIL_RECIPIENT")
+                    if env_fallback:
+                        for addr in env_fallback.replace(";", ",").split(","):
+                            clean = addr.strip()
+                            if clean and clean not in ff_recipients:
+                                ff_recipients.append(clean)
+
+                if ff_recipients:
                     background_tasks.add_task(
                         EmailService.send_fnf_revision_comment_email,
                         record,
                         body.fnf_revision_comment,
-                        ff_recipient
+                        ff_recipients
                     )
                     # Mark as email sent so the daily 10 AM cron won't re-send
                     async with async_session() as mark_session:
@@ -82,6 +101,12 @@ async def update_fnf_status_route(record_id: int, body: FnfUpdateRequest, backgr
                         if db_rec:
                             db_rec.is_fnf_revision_email_sent = True
                             await mark_session.commit()
+                else:
+                    import logging
+                    logging.warning(
+                        f"F&F Team email recipient is not configured (checked 'email_recipients' table and EMAIL_RECIPIENT env). "
+                        f"Skipping revision comment email for record ID {record_id} ({getattr(record, 'person_number', 'N/A')})."
+                    )
             except Exception as email_err:
                 import logging
                 logging.warning(f"Could not queue F&F revision comment email: {email_err}")

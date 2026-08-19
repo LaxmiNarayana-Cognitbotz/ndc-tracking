@@ -34,6 +34,30 @@ logger = logging.getLogger(__name__)
 
 class EmailService:
     @staticmethod
+    def _parse_recipients(recipient) -> list[str]:
+        """Normalize string (comma/semicolon separated) or iterable of emails into a list of unique, stripped email strings."""
+        if not recipient:
+            return []
+        recipients_list: list[str] = []
+        if isinstance(recipient, str):
+            items = recipient.replace(";", ",").split(",")
+        elif isinstance(recipient, (list, tuple, set)):
+            items = []
+            for item in recipient:
+                if isinstance(item, str):
+                    items.extend(item.replace(";", ",").split(","))
+                elif item:
+                    items.append(str(item))
+        else:
+            items = [str(recipient)]
+
+        for addr in items:
+            clean = addr.strip()
+            if clean and clean not in recipients_list:
+                recipients_list.append(clean)
+        return recipients_list
+
+    @staticmethod
     def _fmt_date(d) -> str:
         """Format a date or date-string as '01-Jun-2026'."""
         try:
@@ -233,15 +257,16 @@ class EmailService:
             smtp_password = os.getenv("SMTP_PASSWORD", "")
             smtp_from = os.getenv("SMTP_FROM", smtp_user)
 
-            if not recipient:
-                recipient = os.getenv("EMAIL_RECIPIENT", "")
+            recipients_list = EmailService._parse_recipients(recipient)
+            if not recipients_list:
+                recipients_list = EmailService._parse_recipients(os.getenv("EMAIL_RECIPIENT", ""))
 
             if not smtp_from:
                 msg = "SMTP_FROM not configured"
                 logger.error(msg)
                 return {"success": False, "message": msg}
 
-            if not recipient:
+            if not recipients_list:
                 msg = "Recipient email not configured or provided"
                 logger.error(msg)
                 return {"success": False, "message": msg}
@@ -264,7 +289,7 @@ class EmailService:
             msg = MIMEMultipart("alternative")
             msg["Subject"] = subject_line
             msg["From"] = smtp_from
-            msg["To"] = recipient
+            msg["To"] = ", ".join(recipients_list)
             msg.attach(MIMEText(html_body, "html"))
 
             try:
@@ -275,12 +300,12 @@ class EmailService:
                         server.ehlo()
                     if smtp_password:
                         server.login(smtp_user, smtp_password)
-                    server.sendmail(smtp_from, [recipient], msg.as_string())
+                    server.sendmail(smtp_from, recipients_list, msg.as_string())
 
-                logger.info("%s sent to %s (%d records)", subj_title, recipient, len(records))
+                logger.info("%s sent to %s (%d records)", subj_title, ", ".join(recipients_list), len(records))
                 return {
                     "success": True,
-                    "message": f"Reminder email sent to {recipient} with {len(records)} records.",
+                    "message": f"Reminder email sent to {', '.join(recipients_list)} with {len(records)} records.",
                 }
             except Exception as e:
                 logger.exception("Failed to send reminder email: %s", e)
@@ -652,7 +677,7 @@ class EmailService:
 
 
     @staticmethod
-    def send_fnf_revision_comment_email(record, comment: str, recipient: str) -> bool:
+    def send_fnf_revision_comment_email(record, comment: str, recipient) -> bool:
         """Send an instant email to F&F Team when a record is marked Revision Required with a comment."""
         try:
             if os.getenv("EMAIL_NOTIFICATION", "on").lower() not in ("on", "true", "1", "yes"):
@@ -665,8 +690,21 @@ class EmailService:
             smtp_password = os.getenv("SMTP_PASSWORD", "")
             smtp_from = os.getenv("SMTP_FROM", smtp_user)
 
-            if not smtp_from or not recipient:
-                logger.error("SMTP_FROM or recipient not configured for F&F revision comment email")
+            recipients_list = EmailService._parse_recipients(recipient)
+            if not recipients_list:
+                env_fallback = os.getenv("FNF_EMAIL_RECIPIENT") or os.getenv("EMAIL_RECIPIENT")
+                if env_fallback:
+                    recipients_list = EmailService._parse_recipients(env_fallback)
+
+            if not smtp_from:
+                logger.error("SMTP_FROM not configured for F&F revision comment email")
+                return False
+
+            if not recipients_list:
+                logger.warning(
+                    f"F&F Team email recipient is not configured in database or environment. "
+                    f"Skipping instant revision comment email for {getattr(record, 'employee_name', 'Employee')} ({getattr(record, 'person_number', 'N/A')})."
+                )
                 return False
 
             lwd = EmailService._fmt_date(record.last_working_date)
@@ -736,7 +774,7 @@ class EmailService:
             msg = MIMEMultipart("alternative")
             msg["Subject"] = subject
             msg["From"] = smtp_from
-            msg["To"] = recipient
+            msg["To"] = ", ".join(recipients_list)
             msg.attach(MIMEText(html_body, "html"))
 
             try:
@@ -747,8 +785,8 @@ class EmailService:
                         server.ehlo()
                     if smtp_user and smtp_password:
                         server.login(smtp_user, smtp_password)
-                    server.sendmail(smtp_from, [recipient], msg.as_string())
-                logger.info(f"Successfully sent F&F revision comment email for {record.person_number} to {recipient}")
+                    server.sendmail(smtp_from, recipients_list, msg.as_string())
+                logger.info(f"Successfully sent F&F revision comment email for {record.person_number} to {', '.join(recipients_list)}")
                 return True
             except Exception as smtp_err:
                 logger.error(f"SMTP error sending F&F revision comment email: {smtp_err}")
@@ -900,10 +938,15 @@ class EmailService:
         </body>
         </html>"""
 
+            recipients_list = EmailService._parse_recipients(recipient)
+            if not recipients_list:
+                logger.error(f"Recipient not configured for {stage_name} email")
+                return False
+
             msg = MIMEMultipart("alternative")
             msg["Subject"] = subject
             msg["From"] = smtp_from
-            msg["To"] = recipient
+            msg["To"] = ", ".join(recipients_list)
             msg.attach(MIMEText(html_body, "html"))
 
             try:
@@ -914,11 +957,11 @@ class EmailService:
                         server.ehlo()
                     if smtp_password:
                         server.login(smtp_user, smtp_password)
-                    server.sendmail(smtp_from, [recipient], msg.as_string())
-                logger.info(f"Successfully sent {stage_name} email with {len(records)} records to {recipient}.")
+                    server.sendmail(smtp_from, recipients_list, msg.as_string())
+                logger.info(f"Successfully sent {stage_name} email with {len(records)} records to {', '.join(recipients_list)}.")
                 return True
             except Exception as e:
-                logger.error(f"Failed to send {stage_name} email to {recipient}: {e}")
+                logger.error(f"Failed to send {stage_name} email to {', '.join(recipients_list)}: {e}")
                 return False
         except HTTPException:
             raise
@@ -1158,7 +1201,13 @@ class EmailService:
                     dept_res = await session.execute(select(EmailRecipient))
                     for rec in dept_res.scalars().all():
                         if rec.department and rec.email:
-                            dept_email_map[rec.department.strip().lower()] = rec.email.strip()
+                            dept_key = rec.department.strip().lower()
+                            parsed_emails = EmailService._parse_recipients(rec.email)
+                            if dept_key not in dept_email_map:
+                                dept_email_map[dept_key] = []
+                            for e in parsed_emails:
+                                if e not in dept_email_map[dept_key]:
+                                    dept_email_map[dept_key].append(e)
                 except Exception as e:
                     logger.warning(f"Could not fetch department email recipients: {e}")
                 
