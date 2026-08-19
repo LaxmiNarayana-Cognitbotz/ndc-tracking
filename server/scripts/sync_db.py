@@ -13,8 +13,14 @@ def run_sync():
     BASE_DIR = Path(__file__).resolve().parent.parent
     os.chdir(BASE_DIR)
     
+    # Ensure alembic/versions directory exists
+    versions_dir = BASE_DIR / "alembic" / "versions"
+    versions_dir.mkdir(parents=True, exist_ok=True)
+    
     # Locate alembic in the virtual environment
     alembic_exe = BASE_DIR / ".venv" / "Scripts" / "alembic.exe"
+    if not alembic_exe.exists():
+        alembic_exe = BASE_DIR / ".venv" / "bin" / "alembic"
     if not alembic_exe.exists():
         alembic_exe = "alembic" # fallback if activated
         
@@ -24,8 +30,22 @@ def run_sync():
         capture_output=True, text=True
     )
     if res_upg_initial.returncode != 0:
-        print(f"[ERROR] Error applying existing migrations:\n{res_upg_initial.stderr}")
-        sys.exit(1)
+        if "Can't locate revision identified by" in res_upg_initial.stderr:
+            print("[INFO] Orphaned revision hash found in database (alembic_version). Resetting it to sync cleanly...")
+            try:
+                import asyncio
+                from sqlalchemy import text
+                from config.database import engine
+                async def _clear():
+                    async with engine.begin() as conn:
+                        await conn.execute(text("DELETE FROM alembic_version;"))
+                asyncio.run(_clear())
+                print("[INFO] Reset successful. Continuing with schema sync...")
+            except Exception as ex:
+                print(f"[WARNING] Could not auto-clear alembic_version: {ex}")
+        else:
+            print(f"[ERROR] Error applying existing migrations:\n{res_upg_initial.stderr}")
+            sys.exit(1)
         
     rev_msg = f"auto_sync_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     
