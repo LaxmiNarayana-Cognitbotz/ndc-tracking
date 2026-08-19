@@ -58,6 +58,39 @@ export function Overview() {
   const [inProgressModalOpen, setInProgressModalOpen] = useState(false);
   const [pendingApprovalModalOpen, setPendingApprovalModalOpen] = useState(false);
   const [overdueModalOpen, setOverdueModalOpen] = useState(false);
+
+  // Super Admin Delete Employee State
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [recordToDelete, setRecordToDelete] = useState<NDCRecord | null>(null);
+  const [deleteReason, setDeleteReason] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDeleteRecord = (record: NDCRecord) => {
+    setRecordToDelete(record);
+    setDeleteReason("");
+    setDeleteConfirmOpen(true);
+  };
+
+  const confirmDeleteRecord = async () => {
+    if (!recordToDelete) return;
+    setIsDeleting(true);
+    const toastId = toast.loading(`Deleting employee ${recordToDelete.employeeName}...`);
+    try {
+      const url = `/api/admin/ndc-records/${recordToDelete.personNumber}${deleteReason ? `?reason=${encodeURIComponent(deleteReason)}` : ""}`;
+      await axios.delete(url);
+      toast.dismiss(toastId);
+      toast.success(`Employee ${recordToDelete.employeeName} (${recordToDelete.personNumber}) permanently deleted.`);
+      setMockNDCData((prev) => prev.filter((r) => r.personNumber !== recordToDelete.personNumber));
+      setDeleteConfirmOpen(false);
+      setRecordToDelete(null);
+    } catch (err: any) {
+      toast.dismiss(toastId);
+      const detail = err?.response?.data?.detail || err?.message || "Failed to delete record";
+      toast.error(`Delete failed: ${detail}`);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
   
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [appliedDateRange, setAppliedDateRange] = useState<DateRange | undefined>(undefined);
@@ -900,6 +933,7 @@ export function Overview() {
           itemsPerPage={itemsPerPage}
           onSort={handleSort}
           getRowHighlight={getRowHighlight}
+          onDeleteRecord={handleDeleteRecord}
           onExport={(visibleColumns) => {
             const mappedData = sortedData.map(r => {
               const obj: any = {};
@@ -923,6 +957,59 @@ export function Overview() {
           }}
         />
       </div>
+
+      {/* Super Admin Delete Employee Confirmation Dialog */}
+      <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="w-5 h-5 text-red-600" />
+              Delete Employee Permanently
+            </DialogTitle>
+          </DialogHeader>
+          <div className="p-4 space-y-4">
+            <p className="text-sm text-foreground">
+              Are you sure you want to permanently delete employee{" "}
+              <span className="font-semibold text-red-600">{recordToDelete?.employeeName}</span>{" "}
+              (Person Number: <span className="font-semibold">{recordToDelete?.personNumber}</span>)?
+            </p>
+            <p className="text-xs text-muted-foreground bg-red-50 dark:bg-red-950/40 p-2.5 rounded border border-red-200 dark:border-red-900/50">
+              ⚠️ This will remove the employee from NDC tracking and <strong>permanently exclude</strong> them from all future automated SharePoint and manual Excel syncs.
+            </p>
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                Reason for Deletion (Optional)
+              </label>
+              <input
+                type="text"
+                value={deleteReason}
+                onChange={(e) => setDeleteReason(e.target.value)}
+                placeholder="e.g. Test record, exited before cutoff..."
+                className="w-full px-3 py-2 text-sm border border-border rounded-[4px] bg-input-background focus:outline-none focus:ring-2 focus:ring-red-500"
+              />
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button
+                disabled={isDeleting}
+                onClick={confirmDeleteRecord}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-[4px] hover:bg-red-700 transition-colors flex items-center justify-center gap-2 text-sm font-medium disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {isDeleting ? "Deleting..." : "Permanently Delete"}
+              </button>
+              <button
+                disabled={isDeleting}
+                onClick={() => {
+                  setDeleteConfirmOpen(false);
+                  setRecordToDelete(null);
+                }}
+                className="px-4 py-2 bg-muted text-foreground rounded-[4px] hover:bg-muted/80 transition-colors text-sm font-medium"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

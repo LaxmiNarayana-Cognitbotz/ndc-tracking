@@ -1,8 +1,9 @@
 from fastapi import HTTPException
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Optional
 
 from app.auth.jwt_bearer import get_current_user
 from app.dto.auth import UserCreateRequest, UserUpdateRequest
@@ -73,6 +74,22 @@ async def update_user(email: str, payload: UserUpdateRequest, db: AsyncSession =
 async def delete_user(email: str, db: AsyncSession = Depends(get_db)):
     try:
         return await UsersService.delete_user_service(email, db)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"An error occurred: {str(e)}")
+
+
+@admin_router.delete("/ndc-records/{person_number}")
+async def delete_ndc_record_endpoint(
+    person_number: int,
+    reason: Optional[str] = Query(None),
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    try:
+        deleted_by = current_user.get("sub") or "super_admin"
+        return await UsersService.delete_ndc_record(person_number, deleted_by, reason, db)
     except HTTPException:
         raise
     except Exception as e:

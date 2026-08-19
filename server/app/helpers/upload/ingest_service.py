@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.helpers.upload.excel_parser import read_excel
 from app.helpers.upload.status_mapper import APPROVAL_STAGES, normalize_status
 from app.models.ndc_approval import NdcApproval
+from app.models.ndc_deleted_record import NdcDeletedRecord
 from app.models.ndc_record import NdcRecord
 from app.models.upload_batch import UploadBatch
 from app.utils.date_utils import excel_serial_to_date
@@ -105,6 +106,10 @@ class IngestService:
                     "errors": [f"Missing required columns: {missing}"],
                 }
 
+            # Load excluded / deleted employees to prevent re-importing
+            deleted_res = await db.execute(select(NdcDeletedRecord.person_number))
+            deleted_person_numbers = set(deleted_res.scalars().all())
+
             for idx, row in enumerate(rows, start=2):  # row 2 = first data row in Excel
                 try:
                     person_number = row.get("Person Number")
@@ -126,6 +131,10 @@ class IngestService:
                         continue
 
                     person_number = int(float(person_number))
+
+                    # Permanently excluded by Super Admin — skip row
+                    if person_number in deleted_person_numbers:
+                        continue
 
                     # Upsert ndc_record
                     result = await db.execute(
@@ -162,7 +171,7 @@ class IngestService:
                         # Preserve F&F fields that are manually set — don't overwrite them
                         preserved_fields = {
                             "is_fnf_completed", "is_fnf_revision", "fnf_completed_date",
-                            "gcc_initiate_date", "fnf_document_count",
+                            "gcc_initiate_date", "fnf_document_count", "fnf_revision_comment",
                         }
                         for key, value in record_data.items():
                             if key not in preserved_fields:

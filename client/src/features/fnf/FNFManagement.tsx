@@ -45,6 +45,8 @@ export function FNFManagement() {
   const [sendingMail, setSendingMail] = useState(false);
   const [fnfDelayedTableOpen, setFnfDelayedTableOpen] = useState(false);
   const [fnfDelayedCurrentPage, setFnfDelayedCurrentPage] = useState(1);
+  const [revisionComment, setRevisionComment] = useState("");
+  const [showRevisionComment, setShowRevisionComment] = useState(false);
 
   // Reset to first page on filter change
   useEffect(() => {
@@ -92,9 +94,9 @@ export function FNFManagement() {
   const filteredData = useMemo(() => {
     let filtered = eligibleRecords;
     if (statusFilter) {
-      if (statusFilter === "Done") filtered = filtered.filter((r) => getProp(r, "isFnfCompleted", "is_fnf_completed"));
+      if (statusFilter === "Done") filtered = filtered.filter((r) => getProp(r, "isFnfCompleted", "is_fnf_completed") && !getProp(r, "isFnfClosed", "is_fnf_closed"));
       else if (statusFilter === "Closed") filtered = filtered.filter((r) => getProp(r, "isFnfClosed", "is_fnf_closed"));
-      else if (statusFilter === "Open") filtered = filtered.filter((r) => !getProp(r, "isFnfCompleted", "is_fnf_completed") && !getProp(r, "isFnfRevision", "is_fnf_revision"));
+      else if (statusFilter === "Open") filtered = filtered.filter((r) => !getProp(r, "isFnfCompleted", "is_fnf_completed") && !getProp(r, "isFnfClosed", "is_fnf_closed") && !getProp(r, "isFnfRevision", "is_fnf_revision"));
       else if (statusFilter === "Revision Required") filtered = filtered.filter((r) => getProp(r, "isFnfRevision", "is_fnf_revision"));
     }
     if (searchQuery) {
@@ -193,12 +195,13 @@ export function FNFManagement() {
         toast.success(`F&F marked as Closed and Completed for ${record.employeeName} (${record.personNumber})`);
       });
     } else {
-      // Mark as Revision Required (multiple docs)
+      // Mark as Revision Required (multiple docs) — include comment
       axios.put(`/api/v1/ndc-records/${record.id}`, {
         is_fnf_revision: true,
         is_fnf_closed: false,
         is_fnf_completed: false,
         fnf_document_count: 2,
+        fnf_revision_comment: revisionComment.trim() || undefined,
       }).then(() => {
         fetchData();
         toast.success(`F&F marked as Revision Required for ${record.employeeName} (${record.personNumber})`);
@@ -206,6 +209,8 @@ export function FNFManagement() {
     }
     setActionDialogOpen(false);
     setSelectedRecord(null);
+    setRevisionComment("");
+    setShowRevisionComment(false);
   };
 
   const handleDocumentView = (record: NDCRecord) => {
@@ -629,10 +634,10 @@ export function FNFManagement() {
       </FullScreenModal>
 
       {/* Confirmation Dialog */}
-      <Dialog open={actionDialogOpen} onOpenChange={setActionDialogOpen}>
+      <Dialog open={actionDialogOpen} onOpenChange={(open) => { setActionDialogOpen(open); if (!open) { setShowRevisionComment(false); setRevisionComment(""); } }}>
         <DialogContent className="max-w-md p-6">
           <DialogHeader>
-            <DialogTitle className="text-xl font-semibold text-foreground">F&amp;F document confirmation</DialogTitle>
+            <DialogTitle className="text-xl font-semibold text-foreground">{showRevisionComment ? "Revision Comment" : "F&amp;F document confirmation"}</DialogTitle>
           </DialogHeader>
           {selectedRecord && (
             <div className="space-y-6 pt-4">
@@ -648,26 +653,63 @@ export function FNFManagement() {
                 </p>
               </div>
 
-              <p className="text-base text-slate-900">
-                Is the F&amp;F document ready to be processed?
-              </p>
+              {!showRevisionComment ? (
+                <>
+                  <p className="text-base text-slate-900">
+                    Is the F&amp;F document ready to be processed?
+                  </p>
 
-              <div className="flex gap-4">
-                <button
-                  onClick={() => handleAction(selectedRecord, "closed")}
-                  className="flex-1 px-4 py-3 bg-[#00a651] text-white rounded-[6px] hover:bg-[#008f45] transition-colors flex items-center justify-center gap-2 font-semibold text-sm shadow-sm"
-                >
-                  <CheckCircle className="w-5 h-5 shrink-0" />
-                  Closed
-                </button>
-                <button
-                  onClick={() => handleAction(selectedRecord, "revision")}
-                  className="flex-1 px-4 py-3 bg-[#e30613] text-white rounded-[6px] hover:bg-[#c2050f] transition-colors flex items-center justify-center gap-2 font-semibold text-sm shadow-sm"
-                >
-                  <XCircle className="w-5 h-5 shrink-0" />
-                  Needs revision
-                </button>
-              </div>
+                  <div className="flex gap-4">
+                    <button
+                      onClick={() => handleAction(selectedRecord, "closed")}
+                      className="flex-1 px-4 py-3 bg-[#00a651] text-white rounded-[6px] hover:bg-[#008f45] transition-colors flex items-center justify-center gap-2 font-semibold text-sm shadow-sm"
+                    >
+                      <CheckCircle className="w-5 h-5 shrink-0" />
+                      Closed
+                    </button>
+                    <button
+                      onClick={() => { setShowRevisionComment(true); setRevisionComment(""); }}
+                      className="flex-1 px-4 py-3 bg-[#e30613] text-white rounded-[6px] hover:bg-[#c2050f] transition-colors flex items-center justify-center gap-2 font-semibold text-sm shadow-sm"
+                    >
+                      <XCircle className="w-5 h-5 shrink-0" />
+                      Needs revision
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-slate-700">
+                      Reason for revision <span className="text-red-500">*</span>
+                    </label>
+                    <textarea
+                      value={revisionComment}
+                      onChange={(e) => setRevisionComment(e.target.value.slice(0, 1000))}
+                      placeholder="Enter reason for revision (e.g., Missing salary slip, Form 16 not attached...)"
+                      rows={4}
+                      className="w-full px-3 py-2.5 border border-slate-300 rounded-[6px] text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                    />
+                    <p className="text-xs text-slate-400 text-right">{revisionComment.length}/1000</p>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => { setShowRevisionComment(false); setRevisionComment(""); }}
+                      className="flex-1 px-4 py-2.5 border border-slate-300 text-slate-700 rounded-[6px] hover:bg-slate-50 transition-colors text-sm font-medium"
+                    >
+                      Back
+                    </button>
+                    <button
+                      onClick={() => handleAction(selectedRecord, "revision")}
+                      disabled={!revisionComment.trim()}
+                      className="flex-1 px-4 py-2.5 bg-[#e30613] text-white rounded-[6px] hover:bg-[#c2050f] transition-colors text-sm font-semibold shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    >
+                      <XCircle className="w-4 h-4 shrink-0" />
+                      Submit Revision
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </DialogContent>

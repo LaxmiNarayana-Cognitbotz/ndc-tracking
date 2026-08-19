@@ -626,6 +626,12 @@ class EmailService:
                         else ""
                     )
 
+            # Mark email sent flags in DB
+            record.is_fnf_email_sent = True
+            if getattr(record, "is_fnf_revision", False):
+                record.is_fnf_revision_email_sent = True
+            await db.commit()
+
             if background_tasks:
                 # Run the email sending task in the background so the API returns instantly
                 background_tasks.add_task(EmailService.send_fnf_details_email, email_to.strip(), record_dict)
@@ -643,6 +649,113 @@ class EmailService:
             import logging; logging.error(f'Error in send_fnf_email_service: {e}', exc_info=True)
             import fastapi
             raise fastapi.HTTPException(status_code=500, detail='An internal server error occurred.')
+
+
+    @staticmethod
+    def send_fnf_revision_comment_email(record, comment: str, recipient: str) -> bool:
+        """Send an instant email to F&F Team when a record is marked Revision Required with a comment."""
+        try:
+            if os.getenv("EMAIL_NOTIFICATION", "on").lower() not in ("on", "true", "1", "yes"):
+                logger.info("Email notifications disabled. Skipping instant F&F revision comment email.")
+                return False
+
+            smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
+            smtp_port = int(os.getenv("SMTP_PORT", "587"))
+            smtp_user = os.getenv("SMTP_USER", "")
+            smtp_password = os.getenv("SMTP_PASSWORD", "")
+            smtp_from = os.getenv("SMTP_FROM", smtp_user)
+
+            if not smtp_from or not recipient:
+                logger.error("SMTP_FROM or recipient not configured for F&F revision comment email")
+                return False
+
+            lwd = EmailService._fmt_date(record.last_working_date)
+            today_str = EmailService._fmt_date(date.today())
+            escaped_comment = (comment or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br>")
+
+            subject = f"F&F Revision Required – {record.employee_name} ({record.person_number})"
+
+            html_body = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="background-color:#f5f7fb;font-family:Arial,sans-serif;margin:0;padding:0;">
+<table width="100%" border="0" cellspacing="0" cellpadding="0" bgcolor="#f5f7fb" style="background-color:#f5f7fb;width:100%;padding:20px 10px;">
+  <tr>
+    <td align="center">
+      <table width="100%" border="0" cellspacing="0" cellpadding="0" style="width:100%;max-width:700px;margin:0 auto;background-color:#ffffff;border-radius:10px;border:1px solid #e5e7eb;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08);border-collapse:separate;">
+        <tr>
+          <td bgcolor="#0b3d91" style="background-color:#0b3d91;color:white;padding:25px 35px;">
+            <h2 style="margin:0;font-family:Arial,sans-serif;font-size:22px;color:#ffffff;font-weight:bold;">F&amp;F Revision Required – Action Needed</h2>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:30px;color:#333333;font-family:Arial,sans-serif;font-size:14px;line-height:1.7;">
+            <p style="margin:0 0 16px 0;">Dear Team,</p>
+            <p style="margin:0 0 16px 0;">The following F&amp;F record has been marked as <b>Revision Required</b> on {today_str}:</p>
+            <table width="100%" border="0" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;margin-bottom:20px;">
+              <thead>
+                <tr bgcolor="#eef3fb" style="background-color:#eef3fb;">
+                  <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:1px solid #ececec;">Employee ID</th>
+                  <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:1px solid #ececec;">Name</th>
+                  <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:1px solid #ececec;">Department</th>
+                  <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:1px solid #ececec;">Last Working Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;">{record.person_number}</td>
+                  <td style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;">{record.employee_name}</td>
+                  <td style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;">{record.department or '—'}</td>
+                  <td style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;">{lwd}</td>
+                </tr>
+              </tbody>
+            </table>
+            <div style="background-color:#fffbeb;border-left:4px solid #f59e0b;padding:16px 20px;border-radius:0 6px 6px 0;margin-bottom:20px;">
+              <p style="margin:0 0 8px 0;font-family:Arial,sans-serif;font-size:14px;font-weight:bold;color:#92400e;">Revision Comment</p>
+              <p style="margin:0;font-family:Arial,sans-serif;font-size:13.5px;color:#78350f;line-height:1.6;font-style:italic;">"{escaped_comment}"</p>
+            </div>
+            <p style="margin:0;font-family:Arial,sans-serif;font-size:14px;line-height:1.6;color:#333333;">Kindly review and take the necessary actions at the earliest.</p>
+          </td>
+        </tr>
+        <tr>
+          <td bgcolor="#fafafa" style="padding:25px 30px;background-color:#fafafa;color:#666666;border-top:1px solid #ececec;font-family:Arial,sans-serif;font-size:12.5px;line-height:1.5;">
+            Regards,<br>
+            <b style="color:#333333;">Team HR</b>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+</body>
+</html>"""
+
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = subject
+            msg["From"] = smtp_from
+            msg["To"] = recipient
+            msg.attach(MIMEText(html_body, "html"))
+
+            try:
+                with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as server:
+                    server.ehlo()
+                    if "starttls" in server.esmtp_features:
+                        server.starttls()
+                        server.ehlo()
+                    if smtp_user and smtp_password:
+                        server.login(smtp_user, smtp_password)
+                    server.sendmail(smtp_from, [recipient], msg.as_string())
+                logger.info(f"Successfully sent F&F revision comment email for {record.person_number} to {recipient}")
+                return True
+            except Exception as smtp_err:
+                logger.error(f"SMTP error sending F&F revision comment email: {smtp_err}")
+                return False
+        except Exception as e:
+            logger.error(f"Error in send_fnf_revision_comment_email: {e}", exc_info=True)
+            return False
 
 
     @staticmethod
@@ -1216,35 +1329,36 @@ class EmailService:
                 else:
                     logger.info(f"No pending records for {dept_name}. Skipping email.")
 
-            # Send daily F&F Revision Required email to F&F Team (only once per record)
-            if fnf_revision_records:
-                ff_recipient = dept_email_map.get("f&f team")
-                if not ff_recipient:
-                    ff_recipient = os.getenv("EMAIL_RECIPIENT", "")
-                
-                if ff_recipient:
-                    logger.info(f"Sending daily F&F Revision Required email with {len(fnf_revision_records)} records to {ff_recipient}...")
-                    loop = asyncio.get_event_loop()
-                    success = await loop.run_in_executor(
-                        None,
-                        EmailService.send_notification_email,
-                        fnf_revision_records,
-                        ff_recipient,
-                        "F&F Revision Required"
-                    )
-                    if success:
-                        # Mark as email sent in database
-                        async with async_session() as session:
-                            for r in fnf_revision_records:
-                                stmt = select(NdcRecord).where(NdcRecord.id == r.id)
-                                db_res = await session.execute(stmt)
-                                db_rec = db_res.scalar_one_or_none()
-                                if db_rec:
-                                    db_rec.is_fnf_revision_email_sent = True
-                            await session.commit()
-                        logger.info("Successfully sent daily F&F Revision Required email and updated is_fnf_revision_email_sent flags in DB.")
-                else:
-                    logger.warning("F&F Team email recipient not configured. Skipping daily F&F Revision Required email.")
+            # NOTE: Daily F&F Revision Required email is disabled.
+            # Revision emails are now sent instantly when admin marks "Needs Revision" with a comment.
+            # if fnf_revision_records:
+            #     ff_recipient = dept_email_map.get("f&f team")
+            #     if not ff_recipient:
+            #         ff_recipient = os.getenv("EMAIL_RECIPIENT", "")
+            #     
+            #     if ff_recipient:
+            #         logger.info(f"Sending daily F&F Revision Required email with {len(fnf_revision_records)} records to {ff_recipient}...")
+            #         loop = asyncio.get_event_loop()
+            #         success = await loop.run_in_executor(
+            #             None,
+            #             EmailService.send_notification_email,
+            #             fnf_revision_records,
+            #             ff_recipient,
+            #             "F&F Revision Required"
+            #         )
+            #         if success:
+            #             # Mark as email sent in database
+            #             async with async_session() as session:
+            #                 for r in fnf_revision_records:
+            #                     stmt = select(NdcRecord).where(NdcRecord.id == r.id)
+            #                     db_res = await session.execute(stmt)
+            #                     db_rec = db_res.scalar_one_or_none()
+            #                     if db_rec:
+            #                         db_rec.is_fnf_revision_email_sent = True
+            #                 await session.commit()
+            #             logger.info("Successfully sent daily F&F Revision Required email and updated is_fnf_revision_email_sent flags in DB.")
+            #     else:
+            #         logger.warning("F&F Team email recipient not configured. Skipping daily F&F Revision Required email.")
         except HTTPException:
             raise
         except Exception as e:

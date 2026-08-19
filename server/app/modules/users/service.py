@@ -3,10 +3,13 @@ import os
 from datetime import datetime, timezone
 
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.ndc_approval import NdcApproval
 from app.models.ndc_auth_audit_log import NdcAuthAuditLog
+from app.models.ndc_deleted_record import NdcDeletedRecord
+from app.models.ndc_record import NdcRecord
 from app.models.ndc_user_access import NdcUserAccess
 from app.utils.password import hash_password
 
@@ -276,4 +279,61 @@ class UsersService:
             raise
         except Exception as e:
             logger.error(f"Error in list_audit_logs_service: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail="An internal server error occurred.")
+
+
+    @staticmethod
+    async def delete_ndc_record(person_number: int, deleted_by: str, reason: str | None, db: AsyncSession) -> dict:
+        """Delete an NDC employee record and persistently add them to the exclusion list."""
+        try:
+            # 1. Fetch the employee record
+            stmt = select(NdcRecord).where(NdcRecord.person_number == person_number)
+            res = await db.execute(stmt)
+            record = res.scalar_one_or_none()
+
+            if not record:
+                raise HTTPException(status_code=404, detail=f"Employee with person number {person_number} not found.")
+
+            employee_name = record.employee_name
+
+            # 2. Check if already in ndc_deleted_records
+            del_stmt = select(NdcDeletedRecord).where(NdcDeletedRecord.person_number == person_number)
+            del_res = await db.execute(del_stmt)
+            existing_deleted = del_res.scalar_one_or_none()
+
+            if not existing_deleted:
+                deleted_entry = NdcDeletedRecord(
+                    person_number=person_number,
+                    employee_name=employee_name,
+                    deleted_by=deleted_by,
+                    reason=reason.strip() if reason else None
+                )
+                db.add(deleted_entry)
+            else:
+                existing_deleted.deleted_by = deleted_by
+                existing_deleted.reason = reason.strip() if reason else None
+
+            # 3. Delete approvals and ndc_record
+            await db.execute(delete(NdcApproval).where(NdcApproval.ndc_record_id == record.id))
+            await db.delete(record)
+
+            # 4. Record in audit log
+            audit_log = NdcAuthAuditLog(
+                event_type="employee_deletion",
+                email=deleted_by,
+                role="super_admin",
+                performed_by=deleted_by,
+                notes=f"Permanently deleted employee {employee_name} (Person Number: {person_number}). Reason: {reason or 'None'}"
+            )
+            db.add(audit_log)
+
+            await db.commit()
+            return {
+                "message": f"Employee {employee_name} ({person_number}) permanently deleted and excluded from future syncs.",
+                "person_number": person_number
+            }
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error in delete_ndc_record: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail="An internal server error occurred.")

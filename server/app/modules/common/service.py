@@ -140,6 +140,7 @@ class CommonService:
                     if record.fnf_revision_completed_date
                     else ""
                 ),
+                "fnf_revision_comment": getattr(record, "fnf_revision_comment", None) or "",
                 "recovery_pending_dept": "",
                 "recovery_amount": 0.0,
                 "recovery_status": "",
@@ -259,6 +260,9 @@ class CommonService:
                     record.fnf_revision_completed_date = None
                     if not was_revision and hasattr(record, "is_fnf_revision_email_sent"):
                         record.is_fnf_revision_email_sent = False
+
+            if body.fnf_revision_comment is not None:
+                record.fnf_revision_comment = body.fnf_revision_comment
 
             if body.fnf_document_count is not None:
                 record.fnf_document_count = body.fnf_document_count

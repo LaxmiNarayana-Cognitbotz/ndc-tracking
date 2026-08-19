@@ -47,6 +47,7 @@ class NdcRecord(Base):
     fnf_document_count = Column(Integer, default=0, nullable=False, server_default="0")
     fnf_revision_start_date = Column(Date, nullable=True)
     fnf_revision_completed_date = Column(Date, nullable=True)
+    fnf_revision_comment = Column(String(1000), nullable=True)
 
     # Department Approval Dates
     rm_approval_date = Column(Date, nullable=True)

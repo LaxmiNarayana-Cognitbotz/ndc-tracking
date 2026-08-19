@@ -68,6 +68,7 @@ class CommonNDCRecord(BaseModel):
     fnf_document_count: int = 0
     fnf_revision_start_date: str = ""
     fnf_revision_completed_date: str = ""
+    fnf_revision_comment: str = ""
     recovery_pending_dept: str
     recovery_amount: float
     recovery_status: str
@@ -79,3 +80,4 @@ class FnfUpdateRequest(BaseModel):
     is_fnf_closed: Optional[bool] = None
     is_fnf_revision: Optional[bool] = None
     fnf_document_count: Optional[int] = None
+    fnf_revision_comment: Optional[str] = None

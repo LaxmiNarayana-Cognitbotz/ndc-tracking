@@ -3,10 +3,11 @@ import { NDCRecord } from "../../types";
 import { StatusBadge } from "./StatusBadge";
 import { getPendingDepartments } from "../../utils/pendingDepartments";
 import { formatDate, isDateKey } from "../../utils/dateFormatter";
-import { ChevronLeft, ChevronRight, Download, Settings } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Settings, Trash2 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Checkbox } from "../ui/checkbox";
 import { Label } from "../ui/label";
+import { useAuth } from "../../context/AuthContext";
 
 interface NDCTableProps {
   data: NDCRecord[];
@@ -16,6 +17,7 @@ interface NDCTableProps {
   onSort: (column: keyof NDCRecord) => void;
   getRowHighlight: (record: NDCRecord) => string;
   onExport: (visibleColumns: {key: string, label: string}[]) => void;
+  onDeleteRecord?: (record: NDCRecord) => void;
 }
 
 const allColumns = [
@@ -65,7 +67,9 @@ export function NDCTable({
   onSort,
   getRowHighlight,
   onExport,
+  onDeleteRecord,
 }: NDCTableProps) {
+  const { isSuperAdmin } = useAuth();
   const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(
     new Set(["storeApprovalStatus", "storeApprovalDate"])
   );
@@ -183,6 +187,11 @@ export function NDCTable({
                   {col.label}
                 </th>
               ))}
+              {isSuperAdmin && onDeleteRecord && (
+                <th className="px-4 py-3 text-center text-xs font-medium text-muted-foreground tracking-wide whitespace-nowrap sticky right-0 bg-muted">
+                  Actions
+                </th>
+              )}
             </tr>
           </thead>
           <tbody className="bg-card divide-y divide-border">
@@ -193,6 +202,20 @@ export function NDCTable({
                     {renderCellValue(record, col.key)}
                   </td>
                 ))}
+                {isSuperAdmin && onDeleteRecord && (
+                  <td className="px-4 py-3 text-sm whitespace-nowrap text-center sticky right-0 bg-card/90">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDeleteRecord(record);
+                      }}
+                      className="p-1.5 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/40 rounded transition-colors inline-flex items-center justify-center"
+                      title="Permanently delete employee"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>

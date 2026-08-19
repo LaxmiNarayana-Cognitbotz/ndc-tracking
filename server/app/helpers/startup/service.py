@@ -49,6 +49,7 @@ class StartupService:
         await _add_column("ALTER TABLE ndc_records ADD COLUMN IF NOT EXISTS fnf_document_count INTEGER NOT NULL DEFAULT 0")
         await _add_column("ALTER TABLE ndc_records ADD COLUMN IF NOT EXISTS fnf_revision_start_date DATE")
         await _add_column("ALTER TABLE ndc_records ADD COLUMN IF NOT EXISTS fnf_revision_completed_date DATE")
+        await _add_column("ALTER TABLE ndc_records ADD COLUMN IF NOT EXISTS fnf_revision_comment VARCHAR(1000)")
 
         # ── ndc_records: department approval date columns ────────────────────────
         await _add_column("ALTER TABLE ndc_records ADD COLUMN IF NOT EXISTS rm_approval_date DATE")
@@ -64,6 +65,19 @@ class StartupService:
         await _add_column("ALTER TABLE ndc_records ADD COLUMN IF NOT EXISTS final_abex_approval_date DATE")
         await _add_column("ALTER TABLE ndc_records ADD COLUMN IF NOT EXISTS business_specific_approval_date DATE")
         await _add_column("ALTER TABLE ndc_records ADD COLUMN IF NOT EXISTS legatrix_approval_date DATE")
+
+        # ── ndc_deleted_records: persistent exclusion table ──────────────────────
+        await _add_column("""
+            CREATE TABLE IF NOT EXISTS ndc_deleted_records (
+                id SERIAL PRIMARY KEY,
+                person_number BIGINT UNIQUE NOT NULL,
+                employee_name VARCHAR(200),
+                deleted_by VARCHAR(200) NOT NULL,
+                deleted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                reason VARCHAR(500)
+            )
+        """)
+        await _add_column("CREATE INDEX IF NOT EXISTS idx_deleted_person_number ON ndc_deleted_records(person_number)")
 
         logger.info("Schema migrations completed.")
 
