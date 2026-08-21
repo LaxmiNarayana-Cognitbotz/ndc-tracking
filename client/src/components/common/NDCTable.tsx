@@ -14,6 +14,7 @@ interface NDCTableProps {
   currentPage: number;
   setCurrentPage: (page: number) => void;
   itemsPerPage: number;
+  setItemsPerPage?: (size: number) => void;
   onSort: (column: keyof NDCRecord) => void;
   getRowHighlight: (record: NDCRecord) => string;
   onExport: (visibleColumns: {key: string, label: string}[]) => void;
@@ -64,6 +65,7 @@ export function NDCTable({
   currentPage,
   setCurrentPage,
   itemsPerPage,
+  setItemsPerPage,
   onSort,
   getRowHighlight,
   onExport,
@@ -103,7 +105,7 @@ export function NDCTable({
       return <StatusBadge status={value as string} />;
     }
 
-    if (isDateKey(columnKey) || (typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value))) {
+    if (isDateKey(columnKey) || (typeof value === "string" && (/^\d{4}[-/]\d{1,2}[-/]\d{1,2}/.test(value) || /^\d{1,2}[-/]\d{1,2}[-/]\d{2,4}/.test(value)))) {
       if (!value) return <span className="text-muted-foreground">-</span>;
       return formatDate(value as string);
     }
@@ -222,10 +224,30 @@ export function NDCTable({
         </table>
       </div>
 
-      <div className="px-6 py-4 border-t border-border flex items-center justify-between">
-        <div className="text-sm text-muted-foreground">
-          Showing {startIndex + 1} to {Math.min(startIndex + itemsPerPage, data.length)} of{" "}
-          {data.length} records
+      <div className="px-6 py-4 border-t border-border flex flex-wrap items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="text-sm text-muted-foreground">
+            Showing {data.length > 0 ? startIndex + 1 : 0} to {Math.min(startIndex + itemsPerPage, data.length)} of{" "}
+            {data.length} records
+          </div>
+          {setItemsPerPage && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <span>Rows per page:</span>
+              <select
+                value={itemsPerPage}
+                onChange={(e) => {
+                  setItemsPerPage(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className="h-8 px-2 rounded-[4px] border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+              >
+                <option value={20}>20</option>
+                <option value={30}>30</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -236,11 +258,11 @@ export function NDCTable({
             <ChevronLeft className="w-4 h-4" />
           </button>
           <span className="text-sm text-foreground">
-            Page {currentPage} of {totalPages}
+            Page {currentPage} of {totalPages || 1}
           </span>
           <button
             onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-            disabled={currentPage === totalPages}
+            disabled={currentPage === totalPages || totalPages === 0}
             className="p-2 rounded-[4px] border border-border hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <ChevronRight className="w-4 h-4" />

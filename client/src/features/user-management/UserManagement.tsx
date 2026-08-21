@@ -4,7 +4,8 @@ import api from "../../lib/axios";
 import { formatDate } from "../../utils/dateFormatter";
 import {
   Trash2, Shield, Mail, Key,
-  Loader2, Search, RefreshCw, Info, X, Plus, Pencil, Eye, EyeOff
+  Loader2, Search, RefreshCw, Info, X, Plus, Pencil, Eye, EyeOff,
+  ChevronLeft, ChevronRight
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -194,10 +195,17 @@ export function UserManagement() {
     setShowEditPassword(false);
   };
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
+
   const filteredUsers = users.filter(u =>
     u.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     u.email?.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / itemsPerPage));
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedUsers = filteredUsers.slice(startIndex, startIndex + itemsPerPage);
 
   const getRoleBadge = (role: string) => {
     if (role === "super_admin") {
@@ -323,7 +331,7 @@ export function UserManagement() {
                   </td>
                 </tr>
               ) : (
-                filteredUsers.map((user) => (
+                paginatedUsers.map((user) => (
                   <tr key={user.id} className="hover:bg-muted/50 transition-colors">
                     <td className="px-4 py-2.5">
                       <div className="flex flex-col">
@@ -365,9 +373,46 @@ export function UserManagement() {
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-border flex items-center justify-between bg-card">
-          <div className="text-sm text-muted-foreground">
-            Showing {filteredUsers.length} of {users.length} records
+        <div className="px-6 py-4 border-t border-border flex flex-wrap items-center justify-between gap-4 bg-card">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="text-sm text-muted-foreground">
+              Showing {filteredUsers.length > 0 ? startIndex + 1 : 0} to {Math.min(startIndex + itemsPerPage, filteredUsers.length)} of {filteredUsers.length} records
+            </div>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <span>Rows per page:</span>
+              <select
+                value={itemsPerPage}
+                onChange={(e) => {
+                  setItemsPerPage(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className="h-8 px-2 rounded-[4px] border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+              >
+                <option value={20}>20</option>
+                <option value={30}>30</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className="p-2 rounded-[4px] border border-border hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed text-foreground bg-card"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="text-sm text-foreground">
+              Page {currentPage} of {totalPages || 1}
+            </span>
+            <button
+              onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+              disabled={currentPage === totalPages || totalPages === 0}
+              className="p-2 rounded-[4px] border border-border hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed text-foreground bg-card"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
           </div>
         </div>
       </div>

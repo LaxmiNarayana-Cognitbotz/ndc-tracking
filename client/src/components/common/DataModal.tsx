@@ -1,4 +1,5 @@
-import { X, Download } from "lucide-react";
+import { useState } from "react";
+import { X, Download, ChevronLeft, ChevronRight } from "lucide-react";
 import { NDCRecord } from "../../types";
 import { StatusBadge } from "./StatusBadge";
 import { exportToExcel } from "../../utils/excelExport";
@@ -15,6 +16,13 @@ interface DataModalProps {
 
 export function DataModal({ isOpen, onClose, title, data }: DataModalProps) {
   if (!isOpen) return null;
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
+
+  const totalPages = Math.max(1, Math.ceil(data.length / itemsPerPage));
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedData = data.slice(startIndex, startIndex + itemsPerPage);
 
   const isOverdueModal = title === "Overdue Cases" || title === "NDC Overdue after Exit Cases" || title.includes("Overdue");
 
@@ -129,7 +137,7 @@ export function DataModal({ isOpen, onClose, title, data }: DataModalProps) {
                       </td>
                     </tr>
                   ) : (
-                    data.map((record) => (
+                    paginatedData.map((record) => (
                       <tr key={record.id} className="hover:bg-muted/50">
                         <td className="px-4 py-3 text-sm font-medium whitespace-nowrap">{record.personNumber}</td>
                         <td className="px-4 py-3 text-sm whitespace-nowrap">{record.employeeName}</td>
@@ -200,9 +208,50 @@ export function DataModal({ isOpen, onClose, title, data }: DataModalProps) {
               </table>
             </div>
           </div>
-          <div className="mt-4 text-sm text-muted-foreground">
-            Total Records: {data.length}
-          </div>
+          {data.length > 0 && (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="text-sm text-muted-foreground">
+                  Showing {startIndex + 1} to {Math.min(startIndex + itemsPerPage, data.length)} of {data.length} records
+                </div>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span>Rows per page:</span>
+                  <select
+                    value={itemsPerPage}
+                    onChange={(e) => {
+                      setItemsPerPage(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    className="h-8 px-2 rounded-[4px] border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                  >
+                    <option value={20}>20</option>
+                    <option value={30}>30</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="p-2 rounded-[4px] border border-border hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="text-sm text-foreground">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <button
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="p-2 rounded-[4px] border border-border hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

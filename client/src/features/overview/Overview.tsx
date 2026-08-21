@@ -127,7 +127,8 @@ export function Overview() {
   const [reminderMailDialogOpen, setReminderMailDialogOpen] = useState(false);
   const [reminderMailEmailTo, setReminderMailEmailTo] = useState("");
   const [reminderMailType, setReminderMailType] = useState<string>("ndc_delayed");
-  const itemsPerPage = 20;
+  const [itemsPerPage, setItemsPerPage] = useState(20);
+  const [ndcDelayedItemsPerPage, setNdcDelayedItemsPerPage] = useState(20);
 
   useEffect(() => {
     setIsLoading(true);
@@ -370,9 +371,10 @@ export function Overview() {
 
   const FullScreenTable = ({ data, title }: { data: NDCRecord[]; title: string }) => {
     const [page, setPage] = useState(1);
-    const totalPages = Math.max(1, Math.ceil(data.length / itemsPerPage));
-    const startIndex = (page - 1) * itemsPerPage;
-    const paginatedData = data.slice(startIndex, startIndex + itemsPerPage);
+    const [tableItemsPerPage, setTableItemsPerPage] = useState(20);
+    const totalPages = Math.max(1, Math.ceil(data.length / tableItemsPerPage));
+    const startIndex = (page - 1) * tableItemsPerPage;
+    const paginatedData = data.slice(startIndex, startIndex + tableItemsPerPage);
 
     return (
       <div className="flex flex-col h-full">
@@ -385,7 +387,7 @@ export function Overview() {
                 "Person No.": r.personNumber,
                 "Name": r.employeeName,
                 "Department": r.department,
-                "Last Working Date": r.lastWorkingDate,
+                "Last Working Date": formatDate(r.lastWorkingDate),
                 "NDC Stage": r.ndcStage,
                 "Pending Departments": getPendingDepartments(r),
               }));
@@ -427,9 +429,27 @@ export function Overview() {
           </table>
         </div>
         {data.length > 0 && (
-          <div className="px-6 py-4 border-t border-border flex items-center justify-between shrink-0 bg-card">
-            <div className="text-sm text-muted-foreground">
-              Showing {startIndex + 1} to {Math.min(startIndex + itemsPerPage, data.length)} of {data.length} records
+          <div className="px-6 py-4 border-t border-border flex flex-wrap items-center justify-between gap-4 shrink-0 bg-card">
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="text-sm text-muted-foreground">
+                Showing {startIndex + 1} to {Math.min(startIndex + tableItemsPerPage, data.length)} of {data.length} records
+              </div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span>Rows per page:</span>
+                <select
+                  value={tableItemsPerPage}
+                  onChange={(e) => {
+                    setTableItemsPerPage(Number(e.target.value));
+                    setPage(1);
+                  }}
+                  className="h-8 px-2 rounded-[4px] border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                >
+                  <option value={20}>20</option>
+                  <option value={30}>30</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+              </div>
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -453,7 +473,7 @@ export function Overview() {
           </div>
         )}
       </div>
-    )
+    );
   };
 
   if (isLoading) return <LoadingScreen />;
@@ -826,10 +846,10 @@ export function Overview() {
         <div className="flex-1 overflow-auto p-6">
           {(() => {
             const allDelayed = mockNDCData.filter(isTopDelayed);
-            const totalPages = Math.max(1, Math.ceil(allDelayed.length / itemsPerPage));
-            const startIndex = (ndcDelayedCurrentPage - 1) * itemsPerPage;
+            const totalPages = Math.max(1, Math.ceil(allDelayed.length / ndcDelayedItemsPerPage));
+            const startIndex = (ndcDelayedCurrentPage - 1) * ndcDelayedItemsPerPage;
             const sortedDelayed = [...allDelayed].sort((a, b) => getDelayedDays(b) - getDelayedDays(a));
-            const paginatedDelayed = sortedDelayed.slice(startIndex, startIndex + itemsPerPage);
+            const paginatedDelayed = sortedDelayed.slice(startIndex, startIndex + ndcDelayedItemsPerPage);
 
             return (
               <div className="h-full flex flex-col">
@@ -877,9 +897,27 @@ export function Overview() {
                   </table>
                 </div>
                 {allDelayed.length > 0 && (
-                  <div className="mt-4 flex items-center justify-between shrink-0">
-                    <div className="text-sm text-muted-foreground">
-                      Showing {startIndex + 1} to {Math.min(startIndex + itemsPerPage, allDelayed.length)} of {allDelayed.length} records
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-4 shrink-0">
+                    <div className="flex flex-wrap items-center gap-4">
+                      <div className="text-sm text-muted-foreground">
+                        Showing {startIndex + 1} to {Math.min(startIndex + ndcDelayedItemsPerPage, allDelayed.length)} of {allDelayed.length} records
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <span>Rows per page:</span>
+                        <select
+                          value={ndcDelayedItemsPerPage}
+                          onChange={(e) => {
+                            setNdcDelayedItemsPerPage(Number(e.target.value));
+                            setNdcDelayedCurrentPage(1);
+                          }}
+                          className="h-8 px-2 rounded-[4px] border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                        >
+                          <option value={20}>20</option>
+                          <option value={30}>30</option>
+                          <option value={50}>50</option>
+                          <option value={100}>100</option>
+                        </select>
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <button onClick={() => setNdcDelayedCurrentPage(Math.max(1, ndcDelayedCurrentPage - 1))} disabled={ndcDelayedCurrentPage === 1} className="p-2 rounded-[4px] border border-border hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"><ChevronLeft className="w-4 h-4" /></button>
@@ -931,6 +969,7 @@ export function Overview() {
           currentPage={currentPage}
           setCurrentPage={setCurrentPage}
           itemsPerPage={itemsPerPage}
+          setItemsPerPage={setItemsPerPage}
           onSort={handleSort}
           getRowHighlight={getRowHighlight}
           onDeleteRecord={handleDeleteRecord}

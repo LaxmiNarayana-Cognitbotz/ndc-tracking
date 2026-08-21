@@ -57,6 +57,16 @@ const headerMapping: Record<string, string> = {
   openTextNotes: "Open Text Notes"
 };
 
+const isPersonNumberKey = (k: string) => {
+  const normalized = k.toLowerCase().replace(/[\s_\-.]+/g, '');
+  return (
+    normalized.includes('personnumber') ||
+    normalized.includes('personno') ||
+    normalized.includes('employeeid') ||
+    normalized.includes('empid')
+  );
+};
+
 export const exportToExcel = (data: any[], filename: string) => {
   const formattedData = data.map(item => {
     const formattedItem: any = {};
@@ -64,9 +74,20 @@ export const exportToExcel = (data: any[], filename: string) => {
       if (key === 'id') continue; // Exclude the id field from export
 
       let val = item[key];
-      if (val !== null && val !== undefined) {
+
+      // Convert person/employee numbers to pure numeric values so Excel VLOOKUP works cleanly
+      if (isPersonNumberKey(key)) {
+        if (val !== null && val !== undefined) {
+          // Strip standard spaces, non-breaking spaces (\u00A0), and zero-width characters
+          const cleanedStr = String(val).replace(/[\s\u00A0\u200B-\u200D\uFEFF]+/g, '').trim();
+          const parsed = Number(cleanedStr);
+          if (!isNaN(parsed) && cleanedStr !== '') {
+            val = parsed;
+          }
+        }
+      } else if (val !== null && val !== undefined) {
         if (typeof val === 'string' && val.trim() !== '') {
-          if (isDateKey(key) || /^\d{4}-\d{2}-\d{2}/.test(val.trim())) {
+          if (isDateKey(key) || /^\d{4}[-/]\d{1,2}[-/]\d{1,2}/.test(val.trim()) || /^\d{1,2}[-/]\d{1,2}[-/]\d{2,4}/.test(val.trim())) {
             val = formatDate(val);
           }
         } else if (val instanceof Date) {

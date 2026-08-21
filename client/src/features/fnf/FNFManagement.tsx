@@ -110,14 +110,15 @@ export function FNFManagement() {
     return filtered;
   }, [eligibleRecords, statusFilter, searchQuery]);
 
-  const itemsPerPage = 20;
+  const [itemsPerPage, setItemsPerPage] = useState(20);
+  const [kpiItemsPerPage, setKpiItemsPerPage] = useState(20);
   const totalPages = Math.max(1, Math.ceil(filteredData.length / itemsPerPage));
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedData = filteredData.slice(startIndex, startIndex + itemsPerPage);
 
-  const kpiTotalPages = Math.max(1, Math.ceil(kpiModalData.data.length / itemsPerPage));
-  const kpiStartIndex = (kpiCurrentPage - 1) * itemsPerPage;
-  const kpiPaginatedData = kpiModalData.data.slice(kpiStartIndex, kpiStartIndex + itemsPerPage);
+  const kpiTotalPages = Math.max(1, Math.ceil(kpiModalData.data.length / kpiItemsPerPage));
+  const kpiStartIndex = (kpiCurrentPage - 1) * kpiItemsPerPage;
+  const kpiPaginatedData = kpiModalData.data.slice(kpiStartIndex, kpiStartIndex + kpiItemsPerPage);
 
 
 
@@ -169,6 +170,33 @@ export function FNFManagement() {
 
   const tatRecords = useMemo(() => tatRecordsWithDays.map((item) => item.record), [tatRecordsWithDays]);
 
+  // F&F TAT w.r.t Last Working Date: measures days from LWD to F&F completion.
+  const tatRecordsWithDaysLWD = useMemo(() => {
+    return eligibleRecords.map((r) => {
+      const isCompleted = getProp(r, "isFnfCompleted", "is_fnf_completed");
+      const isClosed = getProp(r, "isFnfClosed", "is_fnf_closed");
+      const fnfStatus = getProp(r, "fnfStatus", "fnf_status");
+
+      const isDone = !!isCompleted || !!isClosed || matchStatus(fnfStatus, "Done") || matchStatus(fnfStatus, "Completed");
+      if (!isDone) return null;
+
+      const lwd = getProp(r, "lastWorkingDate", "last_working_date");
+      const fnfCompleted = getProp(r, "fnfCompletedDate", "fnf_completed_date");
+      const fnfRevCompleted = getProp(r, "fnfRevisionCompletedDate", "fnf_revision_completed_date");
+
+      const startDate = parseValidDate(lwd);
+      const endDate = parseValidDate(fnfCompleted) || parseValidDate(fnfRevCompleted);
+
+      if (!startDate || !endDate) return null;
+
+      const diffMs = Math.abs(endDate.getTime() - startDate.getTime());
+      const days = Math.round(diffMs / (1000 * 60 * 60 * 24));
+      return { record: r, days };
+    }).filter((item): item is { record: NDCRecord; days: number } => item !== null);
+  }, [eligibleRecords]);
+
+  const tatRecordsLWD = useMemo(() => tatRecordsWithDaysLWD.map((item) => item.record), [tatRecordsWithDaysLWD]);
+
   const fnfStats = useMemo(() => {
     const total = eligibleRecords.length;
     const done = eligibleRecords.filter((r) => getProp(r, "isFnfCompleted", "is_fnf_completed") || getProp(r, "isFnfClosed", "is_fnf_closed")).length;
@@ -180,8 +208,12 @@ export function FNFManagement() {
       ? Math.round(tatRecordsWithDays.reduce((sum, item) => sum + item.days, 0) / tatRecordsWithDays.length)
       : 0;
 
-    return { total, done, open, revision, closed, avgTAT };
-  }, [eligibleRecords, tatRecordsWithDays]);
+    const avgTATLWD = tatRecordsWithDaysLWD.length > 0
+      ? Math.round(tatRecordsWithDaysLWD.reduce((sum, item) => sum + item.days, 0) / tatRecordsWithDaysLWD.length)
+      : 0;
+
+    return { total, done, open, revision, closed, avgTAT, avgTATLWD };
+  }, [eligibleRecords, tatRecordsWithDays, tatRecordsWithDaysLWD]);
 
   const handleAction = (record: NDCRecord, action: "closed" | "revision") => {
     if (action === "closed") {
@@ -222,14 +254,15 @@ export function FNFManagement() {
     window.location.href = `${baseUrl}/api/ff/download/${record.personNumber}`;
   };
 
-  const handleKPIClick = (type: "total" | "done" | "open" | "revision" | "closed" | "avgTAT" | "fnfDelayed") => {
+  const handleKPIClick = (type: "total" | "done" | "open" | "revision" | "closed" | "avgTAT" | "avgTATLWD" | "fnfDelayed") => {
     const map = {
       total: { title: "Total F&F In Process", data: eligibleRecords },
       done: { title: "F&F Completed", data: eligibleRecords.filter((r) => r.isFnfCompleted || r.isFnfClosed) },
       open: { title: "F&F Open", data: eligibleRecords.filter((r) => !r.isFnfCompleted && !r.isFnfClosed && !r.isFnfRevision) },
       revision: { title: "Revision Required", data: eligibleRecords.filter((r) => r.isFnfRevision) },
       closed: { title: "F&F Closed", data: eligibleRecords.filter((r) => r.isFnfClosed) },
-      avgTAT: { title: "F&F TAT Records", data: tatRecords },
+      avgTAT: { title: "F&F TAT w.r.t NDC Closure Date", data: tatRecords },
+      avgTATLWD: { title: "F&F TAT w.r.t Last Working Date", data: tatRecordsLWD },
       fnfDelayed: { title: "F&F Delayed Cases", data: fnfDelayedData },
     };
     setKpiModalData(map[type]);
@@ -281,10 +314,11 @@ export function FNFManagement() {
     { type: "open" as const, label: "F&F Open", value: fnfStats.open, icon: Clock, color: "text-blue-600" },
     { type: "revision" as const, label: "Revision Required", value: fnfStats.revision, icon: XCircle, color: "text-red-600" },
     { type: "fnfDelayed" as const, label: "F&F Delayed Cases", value: fnfDelayedData.length, icon: AlertCircle, color: "text-orange-600" },
-    { type: "avgTAT" as const, label: "F&F TAT (In Days)", value: fnfStats.avgTAT, icon: TrendingUp, color: "text-purple-600" },
+    { type: "avgTAT" as const, label: "F&F TAT w.r.t NDC Closure Date (In Days)", value: fnfStats.avgTAT, icon: TrendingUp, color: "text-purple-600" },
+    { type: "avgTATLWD" as const, label: "F&F TAT w.r.t Last Working Date (In Days)", value: fnfStats.avgTATLWD, icon: TrendingUp, color: "text-indigo-600" },
   ];
 
-  const fnfDelayedItemsPerPage = 20;
+  const [fnfDelayedItemsPerPage, setFnfDelayedItemsPerPage] = useState(20);
   const fnfDelayedTotalPages = Math.max(1, Math.ceil(fnfDelayedData.length / fnfDelayedItemsPerPage));
   const fnfDelayedStartIndex = (fnfDelayedCurrentPage - 1) * fnfDelayedItemsPerPage;
   const fnfDelayedPaginated = fnfDelayedData.slice(fnfDelayedStartIndex, fnfDelayedStartIndex + fnfDelayedItemsPerPage);
@@ -486,10 +520,28 @@ export function FNFManagement() {
         </div>
 
         {filteredData.length > 0 && (
-          <div className="px-6 py-4 border-t border-border flex items-center justify-between">
-            <div className="text-sm text-muted-foreground">
-              Showing {startIndex + 1} to {Math.min(startIndex + itemsPerPage, filteredData.length)} of{" "}
-              {filteredData.length} records
+          <div className="px-6 py-4 border-t border-border flex flex-wrap items-center justify-between gap-4">
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="text-sm text-muted-foreground">
+                Showing {startIndex + 1} to {Math.min(startIndex + itemsPerPage, filteredData.length)} of{" "}
+                {filteredData.length} records
+              </div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span>Rows per page:</span>
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => {
+                    setItemsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="h-8 px-2 rounded-[4px] border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                >
+                  <option value={20}>20</option>
+                  <option value={30}>30</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+              </div>
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -603,10 +655,28 @@ export function FNFManagement() {
             </div>
 
             {kpiModalData.data.length > 0 && (
-              <div className="px-6 py-4 border-t border-border flex items-center justify-between bg-card">
-                <div className="text-sm text-muted-foreground">
-                  Showing {kpiStartIndex + 1} to {Math.min(kpiStartIndex + itemsPerPage, kpiModalData.data.length)} of{" "}
-                  {kpiModalData.data.length} records
+              <div className="px-6 py-4 border-t border-border flex flex-wrap items-center justify-between gap-4 bg-card">
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="text-sm text-muted-foreground">
+                    Showing {kpiStartIndex + 1} to {Math.min(kpiStartIndex + kpiItemsPerPage, kpiModalData.data.length)} of{" "}
+                    {kpiModalData.data.length} records
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <span>Rows per page:</span>
+                    <select
+                      value={kpiItemsPerPage}
+                      onChange={(e) => {
+                        setKpiItemsPerPage(Number(e.target.value));
+                        setKpiCurrentPage(1);
+                      }}
+                      className="h-8 px-2 rounded-[4px] border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                    >
+                      <option value={20}>20</option>
+                      <option value={30}>30</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </select>
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
@@ -939,9 +1009,27 @@ export function FNFManagement() {
               </table>
             </div>
             {fnfDelayedData.length > 0 && (
-              <div className="mt-4 flex items-center justify-between shrink-0">
-                <div className="text-sm text-muted-foreground">
-                  Showing {fnfDelayedStartIndex + 1} to {Math.min(fnfDelayedStartIndex + fnfDelayedItemsPerPage, fnfDelayedData.length)} of {fnfDelayedData.length} records
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-4 shrink-0">
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="text-sm text-muted-foreground">
+                    Showing {fnfDelayedStartIndex + 1} to {Math.min(fnfDelayedStartIndex + fnfDelayedItemsPerPage, fnfDelayedData.length)} of {fnfDelayedData.length} records
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <span>Rows per page:</span>
+                    <select
+                      value={fnfDelayedItemsPerPage}
+                      onChange={(e) => {
+                        setFnfDelayedItemsPerPage(Number(e.target.value));
+                        setFnfDelayedCurrentPage(1);
+                      }}
+                      className="h-8 px-2 rounded-[4px] border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                    >
+                      <option value={20}>20</option>
+                      <option value={30}>30</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </select>
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <button onClick={() => setFnfDelayedCurrentPage(Math.max(1, fnfDelayedCurrentPage - 1))} disabled={fnfDelayedCurrentPage === 1} className="p-2 rounded-[4px] border border-border hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"><ChevronLeft className="w-4 h-4" /></button>
