@@ -1,21 +1,28 @@
-from datetime import datetime, timedelta, date
+from datetime import date, datetime, timedelta
 
 
 def excel_serial_to_date(serial) -> date | None:
     """Convert Excel serial date number to Python date."""
-    if not serial:
+    if serial is None:
+        return None
+        
+    if isinstance(serial, float) and (serial != serial):  # check for NaN
         return None
         
     if isinstance(serial, str):
         serial = serial.strip()
+        if not serial:
+            return None
         if "-" in serial or "/" in serial:
-            for fmt in ("%d-%m-%Y", "%d/%m/%Y", "%d/%m/%y"):
+            for fmt in ("%d-%m-%Y", "%d/%m/%Y", "%d/%m/%y", "%Y-%m-%d"):
                 try:
                     return datetime.strptime(serial, fmt).date()
                 except ValueError:
                     pass
     try:
         serial = float(serial)
+        if serial != serial:  # check for NaN
+            return None
     except (ValueError, TypeError):
         return None
     return (datetime(1899, 12, 30) + timedelta(days=serial)).date()

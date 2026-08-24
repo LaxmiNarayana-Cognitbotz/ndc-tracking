@@ -58,6 +58,8 @@ export interface NDCRecord {
   isFnfRevision: boolean;
   gccInitiateDate: string;
   fnfDocumentCount: number;
+  fnfRevisionStartDate?: string;
+  fnfRevisionCompletedDate?: string;
   recoveryPendingDept: string;
   recoveryAmount: number;
   recoveryStatus: string;

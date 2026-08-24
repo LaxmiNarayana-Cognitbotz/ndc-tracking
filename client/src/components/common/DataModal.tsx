@@ -1,7 +1,10 @@
-import { X, Download, Mail } from "lucide-react";
+import { useState } from "react";
+import { X, Download, ChevronLeft, ChevronRight } from "lucide-react";
 import { NDCRecord } from "../../types";
 import { StatusBadge } from "./StatusBadge";
 import { exportToExcel } from "../../utils/excelExport";
+import { getPendingDepartments } from "../../utils/pendingDepartments";
+import { formatDate } from "../../utils/dateFormatter";
 
 interface DataModalProps {
   isOpen: boolean;
@@ -11,10 +14,17 @@ interface DataModalProps {
   onSendReminder?: (type: string) => void;
 }
 
-export function DataModal({ isOpen, onClose, title, data, onSendReminder }: DataModalProps) {
+export function DataModal({ isOpen, onClose, title, data }: DataModalProps) {
   if (!isOpen) return null;
 
-  const isOverdueModal = title === "Overdue Cases";
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
+
+  const totalPages = Math.max(1, Math.ceil(data.length / itemsPerPage));
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedData = data.slice(startIndex, startIndex + itemsPerPage);
+
+  const isOverdueModal = title === "Overdue Cases" || title === "NDC Overdue after Exit Cases" || title.includes("Overdue");
 
   const getDelayDays = (record: NDCRecord) => {
     if (record.ndcCompletedDate) return 0;
@@ -47,35 +57,23 @@ export function DataModal({ isOpen, onClose, title, data, onSendReminder }: Data
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-card w-screen h-screen flex flex-col border-0">
-        <div className="p-6 border-b border-border flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-foreground">{title}</h2>
+      <div className="bg-card border border-border rounded-[4px] shadow-xl w-full max-w-7xl max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <h2 className="text-lg font-semibold text-foreground">
+            {title} ({data.length})
+          </h2>
           <div className="flex items-center gap-2">
-            {onSendReminder && (title === "F&F Open" || title === "F&F Revision Required") && (
-              // <button
-              //   disabled={data.length === 0}
-              //   onClick={() => {
-              //     const type = title === "F&F Open" ? "fnf_open" : "fnf_revision";
-              //     onSendReminder(type);
-              //   }}
-              //   className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground text-sm rounded-[4px] hover:bg-primary/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-              // >
-              //   <Mail className="w-4 h-4" />
-              //   Send Reminder
-              // </button>
-              <></>
-            )}
             <button
               disabled={data.length === 0}
-              onClick={() => exportToExcel(data, title || "Data_Export")}
-              className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground text-sm rounded-[4px] hover:bg-primary/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              onClick={() => exportToExcel(data, title.replace(/ /g, "_"))}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-muted hover:bg-accent text-foreground text-xs rounded-[4px] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <Download className="w-4 h-4" />
-              Export to Excel
+              Export
             </button>
             <button
               onClick={onClose}
-              className="p-2 hover:bg-muted rounded-[4px] transition-colors"
+              className="p-1 rounded-[4px] hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
@@ -83,9 +81,9 @@ export function DataModal({ isOpen, onClose, title, data, onSendReminder }: Data
         </div>
 
         <div className="flex-1 overflow-auto p-6">
-          <div className="bg-card rounded-[4px] border border-border overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
+          <div className="border border-border rounded-[4px] overflow-hidden">
+            <div className="max-h-[60vh] overflow-y-auto">
+              <table className="w-full text-xs">
                 <thead className="bg-muted sticky top-0">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Person Number</th>
@@ -97,8 +95,8 @@ export function DataModal({ isOpen, onClose, title, data, onSendReminder }: Data
                       <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Delay Days</th>
                     )}
                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Overall Status</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Pending Departments</th>
                     
-                    {/* All Approval Stages (Status + Date) in proper order */}
                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">RM Approval</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">RM Approval Date</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">IT Approval</th>
@@ -139,13 +137,13 @@ export function DataModal({ isOpen, onClose, title, data, onSendReminder }: Data
                       </td>
                     </tr>
                   ) : (
-                    data.map((record) => (
+                    paginatedData.map((record) => (
                       <tr key={record.id} className="hover:bg-muted/50">
                         <td className="px-4 py-3 text-sm font-medium whitespace-nowrap">{record.personNumber}</td>
                         <td className="px-4 py-3 text-sm whitespace-nowrap">{record.employeeName}</td>
                         <td className="px-4 py-3 text-sm whitespace-nowrap">{record.department}</td>
                         <td className="px-4 py-3 text-sm whitespace-nowrap">{record.ndcStage}</td>
-                        <td className="px-4 py-3 text-sm whitespace-nowrap">{record.lastWorkingDate}</td>
+                        <td className="px-4 py-3 text-sm whitespace-nowrap">{formatDate(record.lastWorkingDate)}</td>
                         {isOverdueModal && (
                           <td className="px-4 py-3 text-sm whitespace-nowrap">
                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-700 border border-red-200">
@@ -156,51 +154,51 @@ export function DataModal({ isOpen, onClose, title, data, onSendReminder }: Data
                         <td className="px-4 py-3 text-sm whitespace-nowrap">
                           <StatusBadge status={getOverallStatus(record)} />
                         </td>
+                        <td className="px-4 py-3 text-sm whitespace-nowrap">
+                          {getPendingDepartments(record)}
+                        </td>
                         
-                        {/* All Approval Stages Data */}
                         <td className="px-4 py-3 text-sm whitespace-nowrap"><StatusBadge status={record.rmApprovalStatus} /></td>
-                        <td className="px-4 py-3 text-sm whitespace-nowrap">{record.rmApprovalDate || '-'}</td>
+                        <td className="px-4 py-3 text-sm whitespace-nowrap">{formatDate(record.rmApprovalDate)}</td>
                         
                         <td className="px-4 py-3 text-sm whitespace-nowrap"><StatusBadge status={record.itApprovalStatus} /></td>
-                        <td className="px-4 py-3 text-sm whitespace-nowrap">{record.itApprovalDate || '-'}</td>
+                        <td className="px-4 py-3 text-sm whitespace-nowrap">{formatDate(record.itApprovalDate)}</td>
                         
                         <td className="px-4 py-3 text-sm whitespace-nowrap"><StatusBadge status={record.abexApprovalStatus} /></td>
-                        <td className="px-4 py-3 text-sm whitespace-nowrap">{record.abexApprovalDate || '-'}</td>
+                        <td className="px-4 py-3 text-sm whitespace-nowrap">{formatDate(record.abexApprovalDate)}</td>
                         
                         <td className="px-4 py-3 text-sm whitespace-nowrap"><StatusBadge status={record.telecomApprovalStatus} /></td>
-                        <td className="px-4 py-3 text-sm whitespace-nowrap">{record.telecomApprovalDate || '-'}</td>
+                        <td className="px-4 py-3 text-sm whitespace-nowrap">{formatDate(record.telecomApprovalDate)}</td>
                         
                         <td className="px-4 py-3 text-sm whitespace-nowrap"><StatusBadge status={record.storeApprovalStatus} /></td>
-                        <td className="px-4 py-3 text-sm whitespace-nowrap">{record.storeApprovalDate || '-'}</td>
+                        <td className="px-4 py-3 text-sm whitespace-nowrap">{formatDate(record.storeApprovalDate)}</td>
                         
                         <td className="px-4 py-3 text-sm whitespace-nowrap"><StatusBadge status={record.safetyApprovalStatus} /></td>
-                        <td className="px-4 py-3 text-sm whitespace-nowrap">{record.safetyApprovalDate || '-'}</td>
+                        <td className="px-4 py-3 text-sm whitespace-nowrap">{formatDate(record.safetyApprovalDate)}</td>
                         
                         <td className="px-4 py-3 text-sm whitespace-nowrap"><StatusBadge status={record.administrationApprovalStatus} /></td>
-                        <td className="px-4 py-3 text-sm whitespace-nowrap">{record.administrationApprovalDate || '-'}</td>
+                        <td className="px-4 py-3 text-sm whitespace-nowrap">{formatDate(record.administrationApprovalDate)}</td>
                         
                         <td className="px-4 py-3 text-sm whitespace-nowrap"><StatusBadge status={record.securityApprovalStatus} /></td>
-                        <td className="px-4 py-3 text-sm whitespace-nowrap">{record.securityApprovalDate || '-'}</td>
+                        <td className="px-4 py-3 text-sm whitespace-nowrap">{formatDate(record.securityApprovalDate)}</td>
                         
                         <td className="px-4 py-3 text-sm whitespace-nowrap"><StatusBadge status={record.hrApprovalStatus} /></td>
-                        <td className="px-4 py-3 text-sm whitespace-nowrap">{record.hrApprovalDate || '-'}</td>
+                        <td className="px-4 py-3 text-sm whitespace-nowrap">{formatDate(record.hrApprovalDate)}</td>
                         
                         <td className="px-4 py-3 text-sm whitespace-nowrap"><StatusBadge status={record.gccHrApprovalStatus} /></td>
-                        <td className="px-4 py-3 text-sm whitespace-nowrap">{record.gccHrApprovalDate || '-'}</td>
+                        <td className="px-4 py-3 text-sm whitespace-nowrap">{formatDate(record.gccHrApprovalDate)}</td>
                         
                         <td className="px-4 py-3 text-sm whitespace-nowrap"><StatusBadge status={record.businessSpecificApprovalStatus} /></td>
-                        <td className="px-4 py-3 text-sm whitespace-nowrap">{record.businessSpecificApprovalDate || '-'}</td>
+                        <td className="px-4 py-3 text-sm whitespace-nowrap">{formatDate(record.businessSpecificApprovalDate)}</td>
                         
                         <td className="px-4 py-3 text-sm whitespace-nowrap"><StatusBadge status={record.finalAbexApprovalStatus} /></td>
-                        <td className="px-4 py-3 text-sm whitespace-nowrap">{record.finalAbexApprovalDate || '-'}</td>
+                        <td className="px-4 py-3 text-sm whitespace-nowrap">{formatDate(record.finalAbexApprovalDate)}</td>
                         
                         <td className="px-4 py-3 text-sm whitespace-nowrap"><StatusBadge status={record.legatrixApprovalStatus} /></td>
-                        <td className="px-4 py-3 text-sm whitespace-nowrap">{record.legatrixApprovalDate || '-'}</td>
+                        <td className="px-4 py-3 text-sm whitespace-nowrap">{formatDate(record.legatrixApprovalDate)}</td>
                         {!isOverdueModal && (
                           <td className="px-4 py-3 text-sm whitespace-nowrap">
-                            {record.ndcCompletedDate || (
-                              <span className="text-muted-foreground">-</span>
-                            )}
+                            {formatDate(record.ndcCompletedDate)}
                           </td>
                         )}
                       </tr>
@@ -210,9 +208,50 @@ export function DataModal({ isOpen, onClose, title, data, onSendReminder }: Data
               </table>
             </div>
           </div>
-          <div className="mt-4 text-sm text-muted-foreground">
-            Total Records: {data.length}
-          </div>
+          {data.length > 0 && (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="text-sm text-muted-foreground">
+                  Showing {startIndex + 1} to {Math.min(startIndex + itemsPerPage, data.length)} of {data.length} records
+                </div>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span>Rows per page:</span>
+                  <select
+                    value={itemsPerPage}
+                    onChange={(e) => {
+                      setItemsPerPage(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    className="h-8 px-2 rounded-[4px] border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                  >
+                    <option value={20}>20</option>
+                    <option value={30}>30</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="p-2 rounded-[4px] border border-border hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="text-sm text-foreground">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <button
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="p-2 rounded-[4px] border border-border hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

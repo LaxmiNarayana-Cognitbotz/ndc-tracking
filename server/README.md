@@ -63,22 +63,28 @@ Install dependencies using `uv` or `pip`:
 uv sync
 ```
 
-### 3. Initialize the Database Schema
-Unlike complex migration setups, the tables can be created directly using the simplified database initializer:
+### 3. Initialize or Synchronize the Database Schema
+The database uses Alembic to strictly synchronize the SQL tables with your Python models. To initialize the database or apply new model changes, run:
 ```bash
-uv run python init_db.py
+uv run .\scripts\sync_db.py
 ```
 
 ### 4. Run the Server
-Launch the FastAPI uvicorn application:
+Launch the FastAPI application:
 ```bash
-uv run uvicorn main:app --reload
+uv run .\main.py
 ```
-The server will start at `http://localhost:8000`. You can access the interactive API docs at `http://localhost:8000/docs`.
+The server will start at `http://localhost:8010`. You can access the interactive API docs at `http://localhost:8010/docs`.
+
+### 5. Manual SharePoint Sync (Optional)
+If you need to instantly bypass the background polling and manually download/ingest the latest Excel workflow reports from SharePoint, run:
+```bash
+uv run .\scripts\manual_sync.py
+```
 
 ---
 
 ## API Documentation
 
 For detailed information about endpoint inputs, response fields, success/error envelopes, and request samples, please refer to:
-* **[API Documentation Guide (docs/api_endpoints.md)](docs/api_endpoints.md)**
+* **[API Documentation Guide (docs/api_documentation.md)](docs/api_documentation.md)**

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import axios from "../../lib/axios";
-import { Mail, Plus, Trash2, Pencil, Check, X, ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { Mail, Plus, Trash2, Pencil, X, ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { LoadingScreen } from "../../components/common/LoadingScreen";
 import { toast } from "sonner";
 import {
@@ -42,6 +42,7 @@ const DEPARTMENTS = [
   "Business Specific",
   "Final Abex",
   "Legatrix",
+  "F&F Team",
 ];
 
 const EMPTY_FORM = { name: "", email: "", department: "", role: "" };
@@ -66,7 +67,7 @@ export function EmailConfig() {
 
   // Pagination states
   const [page, setPage] = useState(1);
-  const limit = 10;
+  const [limit, setLimit] = useState(20);
 
   // Search state
   const [search, setSearch] = useState("");
@@ -300,9 +301,27 @@ export function EmailConfig() {
         </div>
 
         {/* Client-side Pagination */}
-        <div className="px-6 py-4 border-t border-border flex items-center justify-between bg-card">
-          <div className="text-sm text-muted-foreground">
-            Showing {filteredRecipients.length > 0 ? (page - 1) * limit + 1 : 0} to {Math.min(page * limit, filteredRecipients.length)} of {filteredRecipients.length} records
+        <div className="px-6 py-4 border-t border-border flex flex-wrap items-center justify-between gap-4 bg-card">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="text-sm text-muted-foreground">
+              Showing {filteredRecipients.length > 0 ? (page - 1) * limit + 1 : 0} to {Math.min(page * limit, filteredRecipients.length)} of {filteredRecipients.length} records
+            </div>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <span>Rows per page:</span>
+              <select
+                value={limit}
+                onChange={(e) => {
+                  setLimit(Number(e.target.value));
+                  setPage(1);
+                }}
+                className="h-8 px-2 rounded-[4px] border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+              >
+                <option value={20}>20</option>
+                <option value={30}>30</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <button

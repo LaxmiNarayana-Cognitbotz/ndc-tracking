@@ -1,5 +1,6 @@
-from sqlalchemy import Column, Integer, String, DateTime, Index, func
-from app.models import Base
+from sqlalchemy import Column, DateTime, Index, Integer, String, func
+
+from config.database import Base
 
 
 class NdcAuthAuditLog(Base):

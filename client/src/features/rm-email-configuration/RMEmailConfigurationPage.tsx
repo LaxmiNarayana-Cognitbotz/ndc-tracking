@@ -64,7 +64,7 @@ export function RMEmailConfigurationPage() {
 
   // Pagination states
   const [page, setPage] = useState(1);
-  const limit = 10;
+  const [limit, setLimit] = useState(20);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
 
@@ -307,15 +307,15 @@ export function RMEmailConfigurationPage() {
 
   return (
     <div className="p-8 space-y-6">
-      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold text-foreground">RM Email Master</h1>
           <p className="text-muted-foreground mt-1">Manage relationship managers and their emails for workflow alerts</p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-row items-center gap-3 shrink-0">
           <button
             onClick={handleDownloadSample}
-            className="flex items-center gap-2 px-4 py-2 border border-border bg-card hover:bg-muted text-foreground text-sm font-medium rounded-[4px] transition-colors"
+            className="flex items-center gap-2 px-4 py-2 border border-border bg-card hover:bg-muted text-foreground text-sm font-medium rounded-[4px] transition-colors shrink-0"
           >
             <Download className="w-4 h-4 text-muted-foreground" />
             Download Sample Excel
@@ -326,7 +326,7 @@ export function RMEmailConfigurationPage() {
               setImportSummary(null);
               setFileToUpload(null);
             }}
-            className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-[4px] transition-colors shadow-sm"
+            className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-[4px] transition-colors shadow-sm shrink-0"
           >
             <Upload className="w-4 h-4" />
             Import Excel
@@ -355,7 +355,7 @@ export function RMEmailConfigurationPage() {
               </button>
             )}
           </div>
-          
+
           <button
             onClick={() => {
               setIsAddOpen(true);
@@ -441,9 +441,27 @@ export function RMEmailConfigurationPage() {
         </div>
 
         {/* Server side Pagination */}
-        <div className="px-6 py-4 border-t border-border flex items-center justify-between bg-card">
-          <div className="text-sm text-muted-foreground">
-            Showing {data.length > 0 ? (page - 1) * limit + 1 : 0} to {Math.min(page * limit, total)} of {total} records
+        <div className="px-6 py-4 border-t border-border flex flex-wrap items-center justify-between gap-4 bg-card">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="text-sm text-muted-foreground">
+              Showing {data.length > 0 ? (page - 1) * limit + 1 : 0} to {Math.min(page * limit, total)} of {total} records
+            </div>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <span>Rows per page:</span>
+              <select
+                value={limit}
+                onChange={(e) => {
+                  setLimit(Number(e.target.value));
+                  setPage(1);
+                }}
+                className="h-8 px-2 rounded-[4px] border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+              >
+                <option value={20}>20</option>
+                <option value={30}>30</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <button

@@ -4,9 +4,11 @@ import { Analytics } from "./features/analytics/Analytics";
 import { FNFManagement } from "./features/fnf/FNFManagement";
 import { EmailConfig } from "./features/email-config/EmailConfig";
 import { RMEmailConfigurationPage } from "./features/rm-email-configuration/RMEmailConfigurationPage";
+import { EmployeeEmailMasterPage } from "./features/employee-email-master/EmployeeEmailMasterPage";
 import { Sidebar } from "./layouts/Sidebar";
 import { SidebarProvider, useSidebar } from "./context/SidebarContext";
 import { Toaster } from "sonner";
+import { RouteErrorFallback } from "./components/common/RouteErrorFallback";
 import { GlobalErrorBoundary } from "./components/common/GlobalErrorBoundary";
 
 // Auth context and routes
@@ -14,6 +16,9 @@ import { AuthProvider } from "./context/AuthContext";
 import { ProtectedRoute } from "./components/common/ProtectedRoute";
 import { PendingApproval } from "./features/auth/PendingApproval";
 import { AccessDenied } from "./features/auth/AccessDenied";
+import { Login } from "./features/auth/Login";
+import { ResetPassword } from "./features/auth/ResetPassword";
+import { UserManagement } from "./features/user-management/UserManagement";
 
 function Layout() {
   const { isCollapsed } = useSidebar();
@@ -34,32 +39,47 @@ function Layout() {
 const router = createBrowserRouter(
   [
     {
-      path: "/pending",
-      element: <PendingApproval />,
-    },
-    {
-      path: "/access-denied",
-      element: <AccessDenied />,
-    },
-    {
-      element: (
-        <ProtectedRoute>
-          <SidebarProvider>
-            <Layout />
-          </SidebarProvider>
-        </ProtectedRoute>
-      ),
+      errorElement: <RouteErrorFallback />,
       children: [
-        { index: true, element: <Navigate to="ndc-reporting/overview" replace /> },
-        { path: "ndc-reporting/overview", element: <Overview /> },
-        { path: "ndc-reporting/analytics", element: <Analytics /> },
-        { path: "ndc-reporting/fnf", element: <FNFManagement /> },
-        { path: "ndc-reporting/email-config", element: <EmailConfig /> },
-        { path: "ndc-reporting/rm-email-configuration", element: <RMEmailConfigurationPage /> },
+        {
+          path: "/pending",
+          element: <PendingApproval />,
+        },
+        {
+          path: "/access-denied",
+          element: <AccessDenied />,
+        },
+        {
+          path: "/login",
+          element: <Login />,
+        },
+        {
+          path: "/reset-password",
+          element: <ResetPassword />,
+        },
+        {
+          element: (
+            <ProtectedRoute>
+              <SidebarProvider>
+                <Layout />
+              </SidebarProvider>
+            </ProtectedRoute>
+          ),
+          children: [
+            { index: true, element: <Navigate to="ndc-reporting/overview" replace /> },
+            { path: "ndc-reporting/overview", element: <Overview /> },
+            { path: "ndc-reporting/analytics", element: <Analytics /> },
+            { path: "ndc-reporting/fnf", element: <FNFManagement /> },
+            { path: "ndc-reporting/email-config", element: <EmailConfig /> },
+            { path: "ndc-reporting/rm-email-configuration", element: <RMEmailConfigurationPage /> },
+            { path: "ndc-reporting/employee-email-master", element: <EmployeeEmailMasterPage /> },
+            { path: "ndc-reporting/user-management", element: <UserManagement /> },
+          ],
+        },
       ],
     },
   ],
-  { basename: "/ndc" }
+  { basename: import.meta.env.BASE_URL }
 );
 
 export default function App() {

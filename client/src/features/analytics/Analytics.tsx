@@ -4,6 +4,8 @@ import { NDCRecord } from "../../types";
 import { PPTDownloadButton } from "../../components/common/PPTDownloadButton";
 import { LoadingScreen } from "../../components/common/LoadingScreen";
 import { exportToExcel } from "../../utils/excelExport";
+import { getPendingDepartments } from "../../utils/pendingDepartments";
+import { parseDate } from "../../utils/dateFormatter";
 import { Download } from "lucide-react";
 
 import HighchartsReact from "highcharts-react-official";
@@ -40,7 +42,37 @@ const DEPT_STATUS_FIELDS: Record<string, keyof NDCRecord> = {
   "Legatrix": "legatrixApprovalStatus",
 };
 
+const DEPT_DATE_FIELDS: Record<string, keyof NDCRecord> = {
+  "RM": "rmApprovalDate",
+  "IT": "itApprovalDate",
+  "Abex": "abexApprovalDate",
+  "Telecom": "telecomApprovalDate",
+  "Store": "storeApprovalDate",
+  "Safety": "safetyApprovalDate",
+  "Administration": "administrationApprovalDate",
+  "Security": "securityApprovalDate",
+  "HR": "hrApprovalDate",
+  "GCC HR": "gccHrApprovalDate",
+  "Business Specific": "businessSpecificApprovalDate",
+  "Final Abex": "finalAbexApprovalDate",
+  "Legatrix": "legatrixApprovalDate",
+};
+
 const APPROVAL_DEPT_OPTIONS = Object.keys(DEPT_STATUS_FIELDS).sort((a, b) => a.localeCompare(b));
+
+// ── Go-Live Baseline Toggle (from Environment Variables) ─────────────
+// Controlled via VITE_USE_GO_LIVE_BASELINE & VITE_GO_LIVE_DATE in .env
+const USE_GO_LIVE_BASELINE = import.meta.env.VITE_USE_GO_LIVE_BASELINE !== "false";
+const GO_LIVE_DATE_STR = import.meta.env.VITE_GO_LIVE_DATE || "2026-08-06";
+const GO_LIVE_DATE = new Date(GO_LIVE_DATE_STR);
+const GO_LIVE_DATE_FORMATTED = (() => {
+  try {
+    return format(parseISO(GO_LIVE_DATE_STR), "d MMM yyyy");
+  } catch {
+    return GO_LIVE_DATE_STR;
+  }
+})();
+// ─────────────────────────────────────────────────────────────────────
 
 const getFnfCompletionDays = (record: NDCRecord) => {
   let completedDateStr = record.fnfCompletedDate || record.ndcCompletedDate;
@@ -60,23 +92,6 @@ const getFnfCompletionDays = (record: NDCRecord) => {
   return Math.ceil((completed.getTime() - lastWorking.getTime()) / (1000 * 60 * 60 * 24));
 };
 
-const getNdcCompletionDays = (record: NDCRecord) => {
-  let completedDateStr = record.ndcCompletedDate;
-  if (!completedDateStr) {
-    const approvalDates = Object.keys(record)
-      .filter((k) => k.endsWith("ApprovalDate") && (record as any)[k])
-      .map((k) => (record as any)[k]);
-    if (approvalDates.length > 0) {
-      completedDateStr = approvalDates.sort().reverse()[0];
-    } else {
-      completedDateStr = record.ndcInitiatedDate || record.lastWorkingDate;
-    }
-  }
-  if (!completedDateStr || !record.ndcInitiatedDate) return null;
-  const completed = new Date(completedDateStr);
-  const initiated = new Date(record.ndcInitiatedDate);
-  return Math.max(0, Math.ceil((completed.getTime() - initiated.getTime()) / (1000 * 60 * 60 * 24)));
-};
 
 const getFnfRevisionDays = (record: NDCRecord) => {
   if (!record.fnfRevisionStartDate) return null;
@@ -111,15 +126,15 @@ export function Analytics() {
   }, [mockNDCData, ndcChartApprovalFilter]);
 
   const statusData = useMemo(() => {
-    const completed = ndcChartFilteredData.filter((r) => r.ndcStage === "NDC Completed").length;
-    const pending = ndcChartFilteredData.filter((r) => r.ndcStage === "GCC Pending").length;
-    const inProgress = ndcChartFilteredData.filter((r) => r.ndcStage === "Recovery Pending").length;
+    const completed = mockNDCData.filter((r) => r.ndcStage === "NDC Completed").length;
+    const pending = mockNDCData.filter((r) => r.ndcStage === "GCC Pending").length;
+    const inProgress = mockNDCData.filter((r) => r.ndcStage === "Recovery Pending").length;
     return [
       { name: "Completed", y: completed, color: "#10b981" },
       { name: "Pending", y: pending, color: "#ef4444" },
       { name: "In Progress", y: inProgress, color: "#f59e0b" },
     ].filter((d) => d.y > 0);
-  }, [ndcChartFilteredData]);
+  }, [mockNDCData]);
 
   const totalStatusCount = statusData.reduce((sum, d) => sum + d.y, 0);
 
@@ -134,7 +149,7 @@ export function Analytics() {
       pie: {
         innerSize: "75%",
         size: "85%",
-        showInLegend: false,
+ showInLegend: false,
         dataLabels: {
           enabled: true,
           format: "{point.name}: {point.y} ({point.percentage:.1f}%)",
@@ -243,7 +258,8 @@ export function Analytics() {
     }));
   }, [mockNDCData]);
 
-  // NDC Analysis (same structure as F&F)
+  // NDC Analysis (filtered by Approval Department — shows dept-specific delay)
+
   const ndcAnalysisData = useMemo(() => {
     const cats = {
       "On or due date": 0,
@@ -253,10 +269,45 @@ export function Analytics() {
       "More than 30 days": 0,
     };
 
-    mockNDCData.forEach((record) => {
+    ndcChartFilteredData.forEach((record) => {
       if (record.ndcStage !== "NDC Completed") return;
-      
-      const days = getNdcCompletionDays(record);
+
+      let days: number | null = null;
+
+      if (ndcChartApprovalFilter) {
+        // Department-specific: days from effective start to that dept's approval date
+        const dateField = DEPT_DATE_FIELDS[ndcChartApprovalFilter];
+        const statusField = DEPT_STATUS_FIELDS[ndcChartApprovalFilter];
+        if (!dateField || !statusField) return;
+        if (record[statusField] !== "Completed") return;
+        const deptDateStr = record[dateField] as string;
+        if (!deptDateStr || !record.ndcInitiatedDate) return;
+        const deptDate = new Date(deptDateStr);
+        const initiated = new Date(record.ndcInitiatedDate);
+        // Use the later of initiated date or go-live date as baseline
+        const effectiveStart = USE_GO_LIVE_BASELINE && initiated < GO_LIVE_DATE ? GO_LIVE_DATE : initiated;
+        days = Math.max(0, Math.ceil((deptDate.getTime() - effectiveStart.getTime()) / (1000 * 60 * 60 * 24)));
+      } else {
+        // All: overall NDC completion days with go-live baseline
+        let completedDateStr = record.ndcCompletedDate;
+        if (!completedDateStr) {
+          const approvalDates = Object.keys(record)
+            .filter((k) => k.endsWith("ApprovalDate") && (record as any)[k])
+            .map((k) => (record as any)[k]);
+          if (approvalDates.length > 0) {
+            completedDateStr = approvalDates.sort().reverse()[0];
+          } else {
+            completedDateStr = record.ndcInitiatedDate || record.lastWorkingDate;
+          }
+        }
+        if (!completedDateStr || !record.ndcInitiatedDate) { return; }
+        const completed = new Date(completedDateStr);
+        const initiated = new Date(record.ndcInitiatedDate);
+        // Use the later of initiated date or go-live date as baseline
+        const effectiveStart = USE_GO_LIVE_BASELINE && initiated < GO_LIVE_DATE ? GO_LIVE_DATE : initiated;
+        days = Math.max(0, Math.ceil((completed.getTime() - effectiveStart.getTime()) / (1000 * 60 * 60 * 24)));
+      }
+
       if (days === null) return;
 
       if (days <= 0) cats["On or due date"]++;
@@ -281,7 +332,7 @@ export function Analytics() {
       pct: total > 0 ? Math.round((count / total) * 100) : 0,
       fill: colorMap[name],
     }));
-  }, [mockNDCData]);
+  }, [ndcChartFilteredData, ndcChartApprovalFilter]);
 
   // F&F Closed TAT Analysis
   const fnfClosedTATData = useMemo(() => {
@@ -343,7 +394,7 @@ export function Analytics() {
     }));
   }, [mockNDCData]);
 
-  // NDC Closed TAT Analysis (previously named fnfClosedTATData)
+  // NDC Closed TAT Analysis (with go-live baseline)
   const ndcClosedTATData = useMemo(() => {
     const cats: Record<string, { count: number; color: string }> = {
       "Within 7 Days": { count: 0, color: "#10b981" },
@@ -354,8 +405,24 @@ export function Analytics() {
 
     mockNDCData.forEach((record) => {
       if (record.ndcStage !== "NDC Completed") return;
-      const days = getNdcCompletionDays(record);
-      if (days === null) return;
+      // Inline getNdcCompletionDays with go-live baseline
+      let completedDateStr = record.ndcCompletedDate;
+      if (!completedDateStr) {
+        const approvalDates = Object.keys(record)
+          .filter((k) => k.endsWith("ApprovalDate") && (record as any)[k])
+          .map((k) => (record as any)[k]);
+        if (approvalDates.length > 0) {
+          completedDateStr = approvalDates.sort().reverse()[0];
+        } else {
+          completedDateStr = record.ndcInitiatedDate || record.lastWorkingDate;
+        }
+      }
+      if (!completedDateStr || !record.ndcInitiatedDate) return;
+      const completed = new Date(completedDateStr);
+      const initiated = new Date(record.ndcInitiatedDate);
+      const effectiveStart = USE_GO_LIVE_BASELINE && initiated < GO_LIVE_DATE ? GO_LIVE_DATE : initiated;
+      const days = Math.max(0, Math.ceil((completed.getTime() - effectiveStart.getTime()) / (1000 * 60 * 60 * 24)));
+
       if (days <= 7) cats["Within 7 Days"].count++;
       else if (days <= 15) cats["Within 15 Days"].count++;
       else if (days <= 30) cats["Within 30 Days"].count++;
@@ -376,7 +443,21 @@ export function Analytics() {
     let result = APPROVAL_DEPT_OPTIONS.map((name) => {
       const field = DEPT_STATUS_FIELDS[name];
       const completed = bottleneckFilteredData.filter((r) => r[field] === "Completed").length;
-      const pending = bottleneckFilteredData.filter((r) => r[field] === "Pending").length;
+      const pending = bottleneckFilteredData.filter((r) => {
+        const status = (r[field] as string || "").trim().toLowerCase();
+        const isPending = status === "pending" || status === "in progress" || status === "open";
+        if (!isPending) return false;
+        if (name === "IT" || name === "Security") {
+          const lwd = parseDate(r.lastWorkingDate);
+          if (!lwd) return false;
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          lwd.setHours(0, 0, 0, 0);
+          const daysUntilLWD = Math.round((lwd.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+          if (daysUntilLWD > 3) return false;
+        }
+        return true;
+      }).length;
       
       const totalActive = completed + pending;
       const completedPct = totalActive > 0 ? Math.round((completed / totalActive) * 100) : 0;
@@ -456,39 +537,36 @@ export function Analytics() {
     if (topDelayedFilter === "F&F") return allDelayedCases.filter((r) => r.category === "F&F Pending").slice(0, 10);
     return allDelayedCases.slice(0, 10);
   }, [allDelayedCases, topDelayedFilter]);
-
   const renderInitiatedLabel = (props: any) => {
     const { x, y, value, index } = props;
     if (value === undefined || value === null || value <= 0) return <g />;
-
-    const pct = Math.round((value / (totalMonthly || 1)) * 100);
-    if (pct <= 0) return <g />;
 
     const currentPoint = monthlyTrendData[index];
     if (!currentPoint) return <g />;
 
     const initiatedVal = currentPoint.initiated || 0;
     const completedVal = currentPoint.completed || 0;
+    const pct = totalMonthly > 0 ? Math.round((initiatedVal / totalMonthly) * 100) : 0;
 
-    let dy = -10;
-    const diff = Math.abs(initiatedVal - completedVal);
-
-    if (initiatedVal > 0 && completedVal > 0 && diff <= 12) {
-      if (initiatedVal > completedVal) {
-        dy = completedVal <= 8 ? -26 : -14;
-      } else if (completedVal > initiatedVal) {
-        dy = initiatedVal <= 8 ? -10 : 14;
-      } else {
-        dy = -26;
-      }
-    } else {
-      const position = initiatedVal >= completedVal ? "top" : "bottom";
-      dy = (position === "bottom" && initiatedVal <= 8) || position === "top" ? -10 : 14;
+    let dy = -12;
+    if (initiatedVal < completedVal) {
+      dy = initiatedVal <= 5 ? -12 : 20;
+    } else if (initiatedVal === completedVal && initiatedVal <= 5) {
+      dy = -24;
     }
 
     return (
-      <text x={x} y={y} dy={dy} fill="#1e5a8e" textAnchor="middle" fontSize={12} fontWeight="bold">
-        {pct}%
+      <text
+        x={x}
+        y={y}
+        dy={dy}
+        fill="#1e5a8e"
+        textAnchor="middle"
+        fontSize={11}
+        fontWeight="bold"
+        style={{ paintOrder: "stroke fill", stroke: "#ffffff", strokeWidth: "3px", strokeLinejoin: "round" }}
+      >
+        {pct}% ({initiatedVal})
       </text>
     );
   };
@@ -497,38 +575,35 @@ export function Analytics() {
     const { x, y, value, index } = props;
     if (value === undefined || value === null || value <= 0) return <g />;
 
-    const pct = Math.round((value / (totalMonthly || 1)) * 100);
-    if (pct <= 0) return <g />;
-
     const currentPoint = monthlyTrendData[index];
     if (!currentPoint) return <g />;
 
     const initiatedVal = currentPoint.initiated || 0;
     const completedVal = currentPoint.completed || 0;
+    const pct = totalMonthly > 0 ? Math.round((completedVal / totalMonthly) * 100) : 0;
 
-    let dy = -10;
-    const diff = Math.abs(initiatedVal - completedVal);
-
-    if (initiatedVal > 0 && completedVal > 0 && diff <= 12) {
-      if (completedVal > initiatedVal) {
-        dy = initiatedVal <= 8 ? -26 : -14;
-      } else if (initiatedVal > completedVal) {
-        dy = completedVal <= 8 ? -10 : 14;
-      } else {
-        dy = -10;
-      }
-    } else {
-      const position = completedVal >= initiatedVal ? "top" : "bottom";
-      dy = (position === "bottom" && completedVal <= 8) || position === "top" ? -10 : 14;
+    let dy = -12;
+    if (completedVal < initiatedVal) {
+      dy = completedVal <= 5 ? -12 : 20;
+    } else if (completedVal === initiatedVal && completedVal <= 5) {
+      dy = -10;
     }
 
     return (
-      <text x={x} y={y} dy={dy} fill="#10b981" textAnchor="middle" fontSize={12} fontWeight="bold">
-        {pct}%
+      <text
+        x={x}
+        y={y}
+        dy={dy}
+        fill="#10b981"
+        textAnchor="middle"
+        fontSize={11}
+        fontWeight="bold"
+        style={{ paintOrder: "stroke fill", stroke: "#ffffff", strokeWidth: "3px", strokeLinejoin: "round" }}
+      >
+        {pct}% ({completedVal})
       </text>
     );
   };
-
   const makeCustomBarLabel = (data: { count: number; pct: number }[]) => {
     return ({ x, y, width, index }: any) => {
       const entry = data[index];
@@ -618,10 +693,10 @@ export function Analytics() {
           <div className="flex flex-col">
             <h4 className="text-sm font-semibold text-muted-foreground mb-2 text-center">NDC Analysis</h4>
             <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={ndcAnalysisData} margin={{ top: 28, right: 20, left: 5, bottom: 60 }}>
+              <BarChart data={ndcAnalysisData} margin={{ top: 35, right: 25, left: 10, bottom: 60 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                 <XAxis dataKey="name" stroke="#64748b" tick={{ fontSize: 11 }} interval={0} angle={-35} textAnchor="end" height={70} />
-                <YAxis stroke="#64748b" label={{ value: "Number of Exited Employees", angle: -90, position: "insideLeft", offset: 15, style: { fontSize: 10, textAnchor: "middle" } }} allowDecimals={false} />
+                <YAxis stroke="#64748b" label={{ value: "Number of Exited Employees", angle: -90, position: "insideLeft", offset: 15, style: { fontSize: 10, textAnchor: "middle" } }} allowDecimals={false} domain={[0, (dataMax: number) => Math.max(5, Math.ceil((dataMax * 1.25) / 5) * 5)]} />
                 <Tooltip formatter={(val: number) => [val, "Count"]} />
                 <Bar dataKey="count" radius={[4, 4, 0, 0]} maxBarSize={55} minPointSize={4} isAnimationActive={true} animationDuration={900}>
                   {ndcAnalysisData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
@@ -644,6 +719,11 @@ export function Analytics() {
                 </span>
               ))}
             </div>
+            {USE_GO_LIVE_BASELINE && (
+              <p className="text-[10px] text-muted-foreground/70 italic text-center mt-1">
+                * TAT will be calculated from the go-live date ({GO_LIVE_DATE_FORMATTED}) for all pre-existing records.
+              </p>
+            )}
           </div>
         </div>
       </div>
@@ -678,10 +758,10 @@ export function Analytics() {
           <div className="flex flex-col">
             <h4 className="text-sm font-semibold text-muted-foreground mb-2 text-center">F&amp;F Analysis</h4>
             <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={fnfAnalysisData} margin={{ top: 28, right: 20, left: 5, bottom: 60 }}>
+              <BarChart data={fnfAnalysisData} margin={{ top: 35, right: 25, left: 10, bottom: 60 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                 <XAxis dataKey="name" stroke="#64748b" tick={{ fontSize: 11 }} interval={0} angle={-35} textAnchor="end" height={70} />
-                <YAxis stroke="#64748b" label={{ value: "Number of Exited Employees", angle: -90, position: "insideLeft", offset: 15, style: { fontSize: 10, textAnchor: "middle" } }} allowDecimals={false} />
+                <YAxis stroke="#64748b" label={{ value: "Number of Exited Employees", angle: -90, position: "insideLeft", offset: 15, style: { fontSize: 10, textAnchor: "middle" } }} allowDecimals={false} domain={[0, (dataMax: number) => Math.max(5, Math.ceil((dataMax * 1.25) / 5) * 5)]} />
                 <Tooltip formatter={(val: number) => [val, "Count"]} />
                 <Bar dataKey="count" radius={[4, 4, 0, 0]} maxBarSize={55} minPointSize={4} isAnimationActive={true} animationDuration={900}>
                   {fnfAnalysisData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
@@ -729,7 +809,7 @@ export function Analytics() {
           <ResponsiveContainer width="100%" height={420}>
             <BarChart
               data={approvalBottleneckData}
-              margin={{ top: 25, right: 10, left: -15, bottom: 40 }}
+              margin={{ top: 35, right: 15, left: 0, bottom: 40 }}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
               <XAxis
@@ -789,7 +869,7 @@ export function Analytics() {
             </p> */}
           </div>
           <ResponsiveContainer width="100%" height={420}>
-            <BarChart data={fnfRevisionTATData} margin={{ top: 28, right: 20, left: 5, bottom: 60 }}>
+            <BarChart data={fnfRevisionTATData} margin={{ top: 35, right: 25, left: 10, bottom: 60 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
               <XAxis
                 dataKey="name"
@@ -804,6 +884,7 @@ export function Analytics() {
               <YAxis
                 stroke="#64748b"
                 allowDecimals={false}
+                domain={[0, (dataMax: number) => Math.max(5, Math.ceil((dataMax * 1.25) / 5) * 5)]}
                 label={{ value: "Number of Employees", angle: -90, position: "insideLeft", offset: 15, style: { fontSize: 12, fill: "#64748b", textAnchor: "middle" } }}
               />
               <Tooltip formatter={(val: number) => [val, "Count"]} />
@@ -834,13 +915,14 @@ export function Analytics() {
       {/* Monthly Trend */}
       <div className="bg-card rounded-[4px] p-6 border border-border" id="section-monthly">
         <h3 className="text-lg font-bold mb-4">Monthly Trend NDC Clearance</h3>
-        <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={monthlyTrendData} margin={{ top: 10, right: 20, left: 20, bottom: 5 }}>
+        <ResponsiveContainer width="100%" height={340}>
+          <LineChart data={monthlyTrendData} margin={{ top: 35, right: 40, left: 20, bottom: 30 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
             <XAxis dataKey="displayMonth" stroke="#64748b" />
             <YAxis
               stroke="#64748b"
               allowDecimals={false}
+              domain={[0, (dataMax: number) => Math.max(10, Math.ceil((dataMax * 1.25) / 10) * 10)]}
               label={{ value: "Number of Cases", angle: -90, position: "insideLeft", offset: -5, style: { fontSize: 12, fill: "#64748b", textAnchor: "middle" } }}
             />
             <Tooltip labelFormatter={(label) => label} />
@@ -855,7 +937,7 @@ export function Analytics() {
       <div className="bg-card rounded-[4px] p-6 border border-border" id="section-fnf-tat">
         <h3 className="text-lg font-bold mb-4">F&amp;F Closed TAT Analysis</h3>
         <ResponsiveContainer width="100%" height={320}>
-          <LineChart data={fnfClosedTATData} margin={{ top: 20, right: 40, left: 20, bottom: 40 }}>
+          <LineChart data={fnfClosedTATData} margin={{ top: 35, right: 55, left: 20, bottom: 45 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
             <XAxis
               dataKey="name"
@@ -867,6 +949,7 @@ export function Analytics() {
             <YAxis
               stroke="#64748b"
               allowDecimals={false}
+              domain={[0, (dataMax: number) => Math.max(10, Math.ceil((dataMax * 1.25) / 10) * 10)]}
               label={{ value: "Number of Employees", angle: -90, position: "insideLeft", offset: 10, style: { fontSize: 12, fill: "#64748b", textAnchor: "middle" } }}
             />
             <Tooltip formatter={(val: number) => [val, "Employees"]} />
@@ -906,7 +989,7 @@ export function Analytics() {
       <div className="bg-card rounded-[4px] p-6 border border-border" id="section-ndc-tat">
         <h3 className="text-lg font-bold mb-4">NDC Closed TAT Analysis</h3>
         <ResponsiveContainer width="100%" height={320}>
-          <LineChart data={ndcClosedTATData} margin={{ top: 20, right: 40, left: 20, bottom: 40 }}>
+          <LineChart data={ndcClosedTATData} margin={{ top: 35, right: 55, left: 20, bottom: 45 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
             <XAxis
               dataKey="name"
@@ -918,6 +1001,7 @@ export function Analytics() {
             <YAxis
               stroke="#64748b"
               allowDecimals={false}
+              domain={[0, (dataMax: number) => Math.max(10, Math.ceil((dataMax * 1.25) / 10) * 10)]}
               label={{ value: "Number of Employees", angle: -90, position: "insideLeft", offset: 10, style: { fontSize: 12, fill: "#64748b", textAnchor: "middle" } }}
             />
             <Tooltip formatter={(val: number) => [val, "Employees"]} />
@@ -951,6 +1035,11 @@ export function Analytics() {
             </span>
           ))}
         </div>
+        {USE_GO_LIVE_BASELINE && (
+          <p className="text-[10px] text-muted-foreground/70 italic text-center mt-1">
+            * TAT will be calculated from the go-live date ({GO_LIVE_DATE_FORMATTED}) for all pre-existing records.
+          </p>
+        )}
       </div>
 
 
@@ -977,14 +1066,26 @@ export function Analytics() {
             </div>
             <button
               onClick={() => {
-                const mappedData = topDelayedCases.map(r => ({
-                  "Person Number": r.personNumber,
-                  "Employee Name": r.employeeName,
-                  "Department": r.department,
-                  "Last Working Date": r.lastWorkingDate,
-                  "Category": r.category,
-                  "Delay (Days)": r.delayDays
-                }));
+                const mappedData = topDelayedCases.map(r => {
+                  const item: Record<string, any> = {
+                    "Person Number": r.personNumber,
+                    "Employee Name": r.employeeName,
+                    "Department": r.department,
+                    "Last Working Date": r.lastWorkingDate,
+                    "NDC Initiate Date": r.ndcInitiatedDate || "-",
+                  };
+                  if (topDelayedFilter === "F&F") {
+                    item["Last NDC Cleared Date"] = r.ndcCompletedDate || r.gccHrApprovalDate || "-";
+                  } else if (topDelayedFilter === "NDC") {
+                    item["Pending With"] = getPendingDepartments(r);
+                  } else {
+                    item["Last NDC Cleared Date"] = r.ndcCompletedDate || r.gccHrApprovalDate || "-";
+                    item["Pending With"] = getPendingDepartments(r);
+                  }
+                  item["Category"] = r.category;
+                  item["Delay (Days)"] = r.delayDays;
+                  return item;
+                });
                 exportToExcel(mappedData, `Top_Delayed_Cases_${topDelayedFilter.replace("&", "n")}`);
               }}
               className="flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground text-sm rounded-[4px] hover:bg-primary/90 transition-colors"
@@ -994,26 +1095,42 @@ export function Analytics() {
             </button>
           </div>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
+        <div className="overflow-x-auto border border-border rounded-[4px]">
+          <table className="w-full min-w-[1100px]">
             <thead className="bg-muted">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Person Number</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Employee Name</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Department</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Last Working Date</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Category</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Delay (Days)</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">Person Number</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">Employee Name</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">Department</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">Last Working Date</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">NDC Initiate Date</th>
+                {(topDelayedFilter === "F&F" || topDelayedFilter === "All") && (
+                  <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">Last NDC Cleared Date</th>
+                )}
+                {(topDelayedFilter === "NDC" || topDelayedFilter === "All") && (
+                  <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">Pending With</th>
+                )}
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">Category</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">Delay (Days)</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {topDelayedCases.map((record, i) => (
                 <tr key={`${record.id}-${i}`} className="hover:bg-muted/50">
-                  <td className="px-4 py-3 text-sm font-medium">{record.personNumber}</td>
-                  <td className="px-4 py-3 text-sm">{record.employeeName}</td>
+                  <td className="px-4 py-3 text-sm font-medium whitespace-nowrap">{record.personNumber}</td>
+                  <td className="px-4 py-3 text-sm whitespace-nowrap">{record.employeeName}</td>
                   <td className="px-4 py-3 text-sm">{record.department}</td>
-                  <td className="px-4 py-3 text-sm">{record.lastWorkingDate}</td>
-                  <td className="px-4 py-3 text-sm">
+                  <td className="px-4 py-3 text-sm whitespace-nowrap">{record.lastWorkingDate}</td>
+                  <td className="px-4 py-3 text-sm whitespace-nowrap">{record.ndcInitiatedDate || "-"}</td>
+                  {(topDelayedFilter === "F&F" || topDelayedFilter === "All") && (
+                    <td className="px-4 py-3 text-sm whitespace-nowrap">{record.ndcCompletedDate || record.gccHrApprovalDate || "-"}</td>
+                  )}
+                  {(topDelayedFilter === "NDC" || topDelayedFilter === "All") && (
+                    <td className="px-4 py-3 text-sm min-w-[220px] whitespace-normal" title={getPendingDepartments(record)}>
+                      {getPendingDepartments(record)}
+                    </td>
+                  )}
+                  <td className="px-4 py-3 text-sm whitespace-nowrap">
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${
                       record.category === "NDC Pending"
                         ? "bg-blue-50 text-blue-700 border border-blue-200"
@@ -1022,7 +1139,7 @@ export function Analytics() {
                       {record.category}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-sm">
+                  <td className="px-4 py-3 text-sm whitespace-nowrap">
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium whitespace-nowrap bg-red-50 text-red-700 border border-red-200">
                       {record.delayDays} days
                     </span>
@@ -1030,7 +1147,11 @@ export function Analytics() {
                 </tr>
               ))}
               {topDelayedCases.length === 0 && (
-                <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">No delayed cases found</td></tr>
+                <tr>
+                  <td colSpan={topDelayedFilter === "All" ? 9 : 8} className="px-4 py-8 text-center text-muted-foreground">
+                    No delayed cases found
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>

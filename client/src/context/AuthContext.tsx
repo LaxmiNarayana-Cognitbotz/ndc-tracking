@@ -15,6 +15,9 @@ interface AuthContextType {
   isAdmin: boolean;
   isLoading: boolean;
   login: () => Promise<void>;
+  loginWithPassword: (email: string, password: string) => Promise<any>;
+  verifyOtp: (email: string, otpCode: string) => Promise<any>;
+  resendOtp: (email: string) => Promise<any>;
   logout: () => Promise<void>;
 }
 
@@ -53,37 +56,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loadAuth = async () => {
     try {
-      // 1. Fetch SSO Enabled status from backend
-      // Use skipGlobalToast to prevent error notifications if server is not fully initialized yet
-      const configRes = await api.get<any>("api/auth/config", {
-        skipGlobalToast: true,
-      } as any);
-      const isSso = !!(configRes.data?.data?.sso_enabled ?? configRes.data?.sso_enabled);
-      setSsoEnabled(isSso);
+      setSsoEnabled(false);
 
-      if (!isSso) {
-        // Direct developer access bypass
-        setUser({
-          email: "dev@local.com",
-          name: "Dev User",
-          role: "super_admin",
-          status: "approved",
-        });
-        setIsLoading(false);
-        return;
-      }
-
-      // 2. Check if query parameters contain new token (SSO login redirection callback)
-      const didLoginFromUrl = checkUrlParams();
-      if (didLoginFromUrl) {
-        setIsLoading(false);
-        return;
-      }
-
-      // 3. Otherwise, check localStorage for existing session token
       const token = localStorage.getItem("token");
-      const isAuthPage = window.location.pathname.endsWith("/pending") || window.location.pathname.endsWith("/access-denied");
-
       if (token) {
         try {
           const profileRes = await api.get<any>("api/auth/me", {
@@ -92,37 +67,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const profileData = profileRes.data?.data || profileRes.data;
           setUser(profileData);
         } catch (err: any) {
-          // Token expired or invalid
           console.error("Profile fetch failed, logging out", err);
           localStorage.removeItem("token");
           setUser(null);
-          if (!isAuthPage) {
-            // Trigger auto login redirect
-            setIsLoading(true);
-            const loginRes = await api.get<any>("api/auth/login");
-            const loginData = loginRes.data?.data || loginRes.data;
-            if (loginData.url) {
-              window.location.href = loginData.url;
-              return;
-            }
-          }
         }
       } else {
         setUser(null);
-        if (!isAuthPage) {
-          // Trigger auto login redirect
-          setIsLoading(true);
-          const loginRes = await api.get<any>("api/auth/login");
-          const loginData = loginRes.data?.data || loginRes.data;
-          if (loginData.url) {
-            window.location.href = loginData.url;
-            return;
-          }
-        }
       }
     } catch (err) {
-      console.error("Failed to load auth config or profile", err);
-      // Fallback
+      console.error("Failed to load auth profile", err);
       setUser(null);
     } finally {
       setIsLoading(false);
@@ -130,41 +83,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    checkUrlParams();
     loadAuth();
   }, []);
 
   const login = async () => {
-    try {
-      setIsLoading(true);
-      const loginRes = await api.get<any>("api/auth/login");
-      const loginData = loginRes.data?.data || loginRes.data;
-      if (loginData.url) {
-        window.location.href = loginData.url;
-      }
-    } catch (err) {
-      console.error("Failed to initiate login flow", err);
-    } finally {
-      setIsLoading(false);
+    // Left as legacy/no-op
+  };
+
+  const loginWithPassword = async (email: string, password: string) => {
+    const res = await api.post<any>("api/auth/login", { email, password });
+    const data = res.data?.data || res.data;
+    if (data.token) {
+      localStorage.setItem("token", data.token);
+      setUser({
+        email: data.email,
+        name: data.name,
+        role: data.role,
+        status: data.status,
+      });
     }
+    return data;
+  };
+
+  const verifyOtp = async (email: string, otpCode: string) => {
+    const res = await api.post<any>("api/auth/verify-otp", { email, otp_code: otpCode });
+    const data = res.data?.data || res.data;
+    if (data.token) {
+      localStorage.setItem("token", data.token);
+      setUser({
+        email: data.email,
+        name: data.name,
+        role: data.role,
+        status: data.status,
+      });
+    }
+    return data;
+  };
+
+  const resendOtp = async (email: string) => {
+    const res = await api.post<any>("api/auth/resend-otp", { email });
+    return res.data?.data || res.data;
   };
 
   const logout = async () => {
     try {
       setIsLoading(true);
-      const token = localStorage.getItem("token");
-      if (token) {
-        try {
-          const logoutRes = await api.post<any>("api/auth/logout");
-          const logoutData = logoutRes.data?.data || logoutRes.data;
-          if (logoutData.logout_url) {
-            localStorage.removeItem("token");
-            setUser(null);
-            window.location.href = logoutData.logout_url;
-            return;
-          }
-        } catch (err) {
-          console.error("Logout request to backend failed", err);
-        }
+      try {
+        await api.post<any>("api/auth/logout");
+      } catch (err) {
+        console.error("Logout request to backend failed", err);
       }
     } finally {
       localStorage.removeItem("token");
@@ -185,6 +153,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAdmin,
         isLoading,
         login,
+        loginWithPassword,
+        verifyOtp,
+        resendOtp,
         logout,
       }}
     >

@@ -1,6 +1,6 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text, func
+from sqlalchemy import Column, DateTime, Integer, String, Text, func
 
-from app.models import Base
+from config.database import Base
 
 
 class UploadBatch(Base):

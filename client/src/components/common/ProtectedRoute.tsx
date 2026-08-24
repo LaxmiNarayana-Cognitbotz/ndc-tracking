@@ -8,7 +8,7 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { user, ssoEnabled, isLoading } = useAuth();
+  const { user, isLoading } = useAuth();
 
   if (isLoading) {
     return (
@@ -18,18 +18,9 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     );
   }
 
-  // If SSO is disabled, allow immediate access to the full application
-  if (!ssoEnabled) {
-    return <>{children}</>;
-  }
-
-  // If no user session is active, show the loading screen while redirection takes place
+  // If no user session is active, redirect to login page
   if (!user) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
-        <LoadingScreen />
-      </div>
-    );
+    return <Navigate to="/login" replace />;
   }
 
   // If session is active but pending approval

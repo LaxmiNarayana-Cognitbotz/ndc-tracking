@@ -1,14 +1,22 @@
 # Python-generated files
 __pycache__/
 *.py[oc]
-__init__.py
 build/
 dist/
+
+
 wheels/
 *.egg-info
+.mypy_cache/
+.pytest_cache/
+.coverage
+htmlcov/
 
 # Virtual environments
 .venv
+env/
+venv/
+ENV/
 
 # Environment
 .env
@@ -16,11 +24,22 @@ wheels/
 # Uploads
 uploads/
 
-# Alembic
-alembic.ini
-
-# Logs
+# Logs and databases
 logs/
+*.log
+*.sqlite
+*.sqlite3
+*.db
+versions/
 
-# Alembic history
-alembic/versions/
+
+
+# VS Code and IDEs
+.vscode/
+*.code-workspace
+.idea/
+*.swp
+
+# OS generated files
+.DS_Store
+Thumbs.db

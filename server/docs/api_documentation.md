@@ -26,6 +26,7 @@ server/
 │   ├── services/          # Business logic services (Excel parser, Email, SharePoint, Sync)
 │   └── utils/             # Utilities (Response helpers, cron daemon, manual job CLI wrapper)
 ├── config/                # Configuration and database engine initialization
+├── scripts/               # Utility scripts (Alembic DB Sync, Manual SharePoint Sync)
 ├── docs/                  # API and System Architecture Documentation
 ├── main.py                # Application entrypoint & background lifecycle tasks
 └── .env                   # Configuration environment variables
@@ -327,11 +328,12 @@ Manages recipient configuration and manual triggers for email notifications.
 * **Error Response (404 Not Found)**: Returned if recipient is not found.
 
 #### `POST /api/v1/send-delayed-reminder`
-* **Description**: Compiles the top 10 delayed/overdue cases that are non-completed and sends a reminder summary email to the custom recipient email address.
+* **Description**: Compiles delayed/overdue cases (top 10 for NDC delayed cases, or all records for F&F open/revision required cases) and sends a reminder summary email to the custom recipient email address.
 * **Request Body**: `DelayedReminderRequest`
 ```json
 {
-  "email": "admin@company.com"
+  "email": "admin@company.com",
+  "type": "fnf_open"
 }
 ```
 * **Success Response (200 OK)**:
@@ -340,8 +342,8 @@ Manages recipient configuration and manual triggers for email notifications.
   "status": true,
   "data": {
     "status": "success",
-    "message": "Reminder email sent to admin@company.com with 10 delayed records.",
-    "records_sent": 10
+    "message": "Reminder email sent to admin@company.com with 56 records.",
+    "records_sent": 56
   },
   "message": null
 }
@@ -524,8 +526,23 @@ The application starts several concurrent background loops during the FastAPI st
 2. **F&F Completed Ingestion Sync (`fnf_completed_sync_loop`)**: Periodically updates document statuses in the DB.
 3. **Email Automation Loop (`email_automation_loop` in `server/app/utils/scheduler.py`)**: Checks current local time continuously. Triggers both `run_10am_job()` (consolidated notifications) and `run_tomorrow_alert_job()` (IT/Security tomorrow warnings) automatically at **10:00 AM** daily.
 
-### Manual CLI Runner (`server/app/utils/run_email_jobs.py`)
-Allows operations team to bypass the scheduler and run email batches manually:
+### Manual CLI Utilities (`server/scripts/` & `server/app/utils/`)
+The application includes standalone scripts to allow the operations team to bypass background schedules and execute critical actions manually:
+
+**1. SharePoint Data Ingestion**
+Instantly downloads and ingests the latest Excel reports from SharePoint without waiting for the background polling loop:
+```bash
+uv run .\scripts\manual_sync.py
+```
+
+**2. Database Synchronization**
+Evaluates SQLAlchemy models and strictly synchronizes the PostgreSQL schema via Alembic migrations:
+```bash
+uv run .\scripts\sync_db.py
+```
+
+**3. Email Automations**
+Run email batches manually:
 ```bash
 # Execute both consolidated and next-day alert jobs
 uv run python -m app.utils.run_email_jobs --job both

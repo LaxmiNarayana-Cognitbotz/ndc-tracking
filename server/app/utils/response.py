@@ -1,4 +1,3 @@
-import os
 import traceback
 from typing import Any
 
@@ -13,6 +12,10 @@ class UnifiedJSONResponse(JSONResponse):
     def render(self, content: Any) -> bytes:
         # If content is already wrapped in the unified error/success envelope, skip wrapping
         if isinstance(content, dict) and "status" in content and ("data" in content or "message" in content):
+            return super().render(content)
+
+        # If content is a pagination envelope returned by services, skip wrapping
+        if isinstance(content, dict) and "data" in content and "page" in content and "total" in content:
             return super().render(content)
 
         # Handle pagination metadata if it matches PaginatedResponse schema structure
@@ -40,7 +43,7 @@ class UnifiedJSONResponse(JSONResponse):
 
 
 async def validation_exception_handler(request, exc: RequestValidationError):
-    """Handle request validation errors and return standard error envelope with field details in snake_case."""
+    """Handle request validation errors and return standard error envelope with field details in `snake_case."""
     errors_list = []
     for error in exc.errors():
         loc = error["loc"]
@@ -56,7 +59,7 @@ async def validation_exception_handler(request, exc: RequestValidationError):
         })
         
     return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         content={
             "status": False,
             "data": {

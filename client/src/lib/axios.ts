@@ -29,11 +29,16 @@ api.interceptors.response.use(
     }
 
     // Determine the error message
-    const message =
+    let message =
       error.response?.data?.message ||
       error.response?.data?.detail ||
       error.message ||
       "An unexpected API error occurred.";
+
+    // Simplify error message for internal server errors to avoid exposing internal traceback/DB details
+    if (error.response?.status === 500) {
+      message = "An unexpected server error occurred. Please try again later.";
+    }
 
     // Display global error toast
     toast.error(`Error: ${message}`, {

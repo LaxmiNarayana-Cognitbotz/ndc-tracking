@@ -1,6 +1,7 @@
-from sqlalchemy import Column, Integer, String, DateTime, func
+from sqlalchemy import Column, DateTime, Integer, String, func
 
-from app.models import Base
+from config.database import Base
+
 
 class EmailRecipient(Base):
     __tablename__ = "email_recipients"

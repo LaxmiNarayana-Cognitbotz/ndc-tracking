@@ -1,6 +1,7 @@
 import PptxGenJS from "pptxgenjs";
 import { toPng } from "html-to-image";
 import { toast } from "sonner";
+import { formatDate } from "./dateFormatter";
 
 export const createPPT = (title: string) => {
   const pptx = new PptxGenJS();
@@ -23,7 +24,7 @@ export const createPPT = (title: string) => {
       },
       {
         text: {
-          text: `Generated on ${new Date().toLocaleDateString()}`,
+          text: `Generated on ${formatDate(new Date())}`,
           options: { x: 9.5, y: 0.1, w: 3.5, h: 0.6, fontSize: 12, color: "FFFFFF", align: "right", valign: "middle" }
         }
       },

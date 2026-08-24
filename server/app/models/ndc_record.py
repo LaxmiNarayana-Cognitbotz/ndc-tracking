@@ -1,9 +1,17 @@
 from sqlalchemy import (
-    Column, Integer, BigInteger, String, Date, DateTime, Boolean, CheckConstraint, Index,
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    Column,
+    Date,
+    DateTime,
+    Index,
+    Integer,
+    String,
     func,
 )
 
-from app.models import Base
+from config.database import Base
 
 
 class NdcRecord(Base):
@@ -27,13 +35,19 @@ class NdcRecord(Base):
     created_by = Column(String(200))
     source_file = Column(String(500))
     batch_id = Column(Integer)
+    
     # F&F tracking columns
     is_fnf_completed = Column(Boolean, default=False, nullable=False, server_default="false")
     is_fnf_closed = Column(Boolean, default=False, nullable=False, server_default="false")
     is_fnf_revision = Column(Boolean, default=False, nullable=False, server_default="false")
+    is_fnf_email_sent = Column(Boolean, default=False, nullable=False, server_default="false")
+    is_fnf_revision_email_sent = Column(Boolean, default=False, nullable=False, server_default="false")
     fnf_completed_date = Column(Date, nullable=True)
     gcc_initiate_date = Column(Date, nullable=True)
     fnf_document_count = Column(Integer, default=0, nullable=False, server_default="0")
+    fnf_revision_start_date = Column(Date, nullable=True)
+    fnf_revision_completed_date = Column(Date, nullable=True)
+    fnf_revision_comment = Column(String(1000), nullable=True)
 
     # Department Approval Dates
     rm_approval_date = Column(Date, nullable=True)

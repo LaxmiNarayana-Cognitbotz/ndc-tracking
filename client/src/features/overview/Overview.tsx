@@ -11,6 +11,8 @@ import { DataModal } from "../../components/common/DataModal";
 import { NDCTable } from "../../components/common/NDCTable";
 import { FullScreenModal } from "../../components/common/FullScreenModal";
 import { LoadingScreen } from "../../components/common/LoadingScreen";
+import { getPendingDepartments } from "../../utils/pendingDepartments";
+import { formatDate, parseDate } from "../../utils/dateFormatter";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "../../components/ui/popover";
 import { Calendar } from "../../components/ui/calendar";
@@ -51,13 +53,44 @@ export function Overview() {
   const [modalData, setModalData] = useState<{ title: string; data: NDCRecord[] }>({ title: "", data: [] });
   const [openNDCModalOpen, setOpenNDCModalOpen] = useState(false);
   const [closedNDCModalOpen, setClosedNDCModalOpen] = useState(false);
-  const [delayedCasesModalOpen, setDelayedCasesModalOpen] = useState(false);
   const [ndcDelayedTableOpen, setNdcDelayedTableOpen] = useState(false);
-  const [fnfDelayedTableOpen, setFnfDelayedTableOpen] = useState(false);
   const [totalExitModalOpen, setTotalExitModalOpen] = useState(false);
   const [inProgressModalOpen, setInProgressModalOpen] = useState(false);
   const [pendingApprovalModalOpen, setPendingApprovalModalOpen] = useState(false);
   const [overdueModalOpen, setOverdueModalOpen] = useState(false);
+
+  // Super Admin Delete Employee State
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [recordToDelete, setRecordToDelete] = useState<NDCRecord | null>(null);
+  const [deleteReason, setDeleteReason] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDeleteRecord = (record: NDCRecord) => {
+    setRecordToDelete(record);
+    setDeleteReason("");
+    setDeleteConfirmOpen(true);
+  };
+
+  const confirmDeleteRecord = async () => {
+    if (!recordToDelete) return;
+    setIsDeleting(true);
+    const toastId = toast.loading(`Deleting employee ${recordToDelete.employeeName}...`);
+    try {
+      const url = `/api/admin/ndc-records/${recordToDelete.personNumber}${deleteReason ? `?reason=${encodeURIComponent(deleteReason)}` : ""}`;
+      await axios.delete(url);
+      toast.dismiss(toastId);
+      toast.success(`Employee ${recordToDelete.employeeName} (${recordToDelete.personNumber}) permanently deleted.`);
+      setMockNDCData((prev) => prev.filter((r) => r.personNumber !== recordToDelete.personNumber));
+      setDeleteConfirmOpen(false);
+      setRecordToDelete(null);
+    } catch (err: any) {
+      toast.dismiss(toastId);
+      const detail = err?.response?.data?.detail || err?.message || "Failed to delete record";
+      toast.error(`Delete failed: ${detail}`);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
   
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [appliedDateRange, setAppliedDateRange] = useState<DateRange | undefined>(undefined);
@@ -90,12 +123,12 @@ export function Overview() {
   };
 
   const [ndcDelayedCurrentPage, setNdcDelayedCurrentPage] = useState(1);
-  const [fnfDelayedCurrentPage, setFnfDelayedCurrentPage] = useState(1);
   const [sendingReminder, setSendingReminder] = useState(false);
   const [reminderMailDialogOpen, setReminderMailDialogOpen] = useState(false);
   const [reminderMailEmailTo, setReminderMailEmailTo] = useState("");
   const [reminderMailType, setReminderMailType] = useState<string>("ndc_delayed");
-  const itemsPerPage = 10;
+  const [itemsPerPage, setItemsPerPage] = useState(20);
+  const [ndcDelayedItemsPerPage, setNdcDelayedItemsPerPage] = useState(20);
 
   useEffect(() => {
     setIsLoading(true);
@@ -163,6 +196,21 @@ export function Overview() {
   const applyApprovalFilters = (filtered: NDCRecord[]) => {
     const normalize = (str: string) => (str || "").toLowerCase().replace(/[_\s]+/g, "");
 
+    const isITOrSecDepartment = (dept: string) => {
+      const norm = normalize(dept);
+      return norm === "it" || norm === "security";
+    };
+
+    const isLWDWithin3Days = (record: NDCRecord) => {
+      const lwd = parseDate(record.lastWorkingDate);
+      if (!lwd) return false;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      lwd.setHours(0, 0, 0, 0);
+      const daysUntilLWD = Math.round((lwd.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      return daysUntilLWD <= 3;
+    };
+
     if (approvalDepartmentFilter && approvalStatusFilter) {
       const statusMap: Record<string, string> = {
         'rm': 'rmApprovalStatus', 'it': 'itApprovalStatus', 'abex': 'abexApprovalStatus',
@@ -173,7 +221,17 @@ export function Overview() {
       };
       const fieldName = statusMap[normalize(approvalDepartmentFilter)] as keyof NDCRecord;
       const targetStatus = normalize(approvalStatusFilter);
-      return filtered.filter((r) => fieldName && normalize(r[fieldName] as string) === targetStatus);
+      const isITOrSec = isITOrSecDepartment(approvalDepartmentFilter);
+
+      return filtered.filter((r) => {
+        if (!fieldName) return false;
+        const status = normalize(r[fieldName] as string);
+        if (status !== targetStatus) return false;
+        if (targetStatus === "pending" && isITOrSec) {
+          return isLWDWithin3Days(r);
+        }
+        return true;
+      });
     } else if (approvalDepartmentFilter) {
       const statusMap: Record<string, string> = {
         'rm': 'rmApprovalStatus', 'it': 'itApprovalStatus', 'abex': 'abexApprovalStatus',
@@ -183,17 +241,43 @@ export function Overview() {
         'businessspecific': 'businessSpecificApprovalStatus', 'legatrix': 'legatrixApprovalStatus'
       };
       const fieldName = statusMap[normalize(approvalDepartmentFilter)] as keyof NDCRecord;
-      return filtered.filter((r) => fieldName && r[fieldName] !== "" && normalize(r[fieldName] as string) !== "notapplicable");
+      const isITOrSec = isITOrSecDepartment(approvalDepartmentFilter);
+
+      return filtered.filter((r) => {
+        if (!fieldName || !r[fieldName]) return false;
+        const status = normalize(r[fieldName] as string);
+        if (status === "notapplicable") return false;
+        if (status === "pending" && isITOrSec) {
+          return isLWDWithin3Days(r);
+        }
+        return true;
+      });
     } else if (approvalStatusFilter) {
       const targetStatus = normalize(approvalStatusFilter);
       return filtered.filter((r) => {
-        const statuses = [
-          r.rmApprovalStatus, r.itApprovalStatus, r.abexApprovalStatus, r.telecomApprovalStatus,
-          r.storeApprovalStatus, r.safetyApprovalStatus, r.administrationApprovalStatus,
-          r.securityApprovalStatus, r.hrApprovalStatus, r.gccHrApprovalStatus, r.finalAbexApprovalStatus,
-          r.businessSpecificApprovalStatus, r.legatrixApprovalStatus
+        const deptKeys: { key: keyof NDCRecord; isITOrSec: boolean }[] = [
+          { key: "rmApprovalStatus", isITOrSec: false },
+          { key: "itApprovalStatus", isITOrSec: true },
+          { key: "abexApprovalStatus", isITOrSec: false },
+          { key: "telecomApprovalStatus", isITOrSec: false },
+          { key: "storeApprovalStatus", isITOrSec: false },
+          { key: "safetyApprovalStatus", isITOrSec: false },
+          { key: "administrationApprovalStatus", isITOrSec: false },
+          { key: "securityApprovalStatus", isITOrSec: true },
+          { key: "hrApprovalStatus", isITOrSec: false },
+          { key: "gccHrApprovalStatus", isITOrSec: false },
+          { key: "finalAbexApprovalStatus", isITOrSec: false },
+          { key: "businessSpecificApprovalStatus", isITOrSec: false },
+          { key: "legatrixApprovalStatus", isITOrSec: false },
         ];
-        return statuses.some((status) => normalize(status) === targetStatus);
+        return deptKeys.some(({ key, isITOrSec }) => {
+          const status = normalize(r[key] as string);
+          if (status !== targetStatus) return false;
+          if (targetStatus === "pending" && isITOrSec) {
+            return isLWDWithin3Days(r);
+          }
+          return true;
+        });
       });
     }
     return filtered;
@@ -216,8 +300,8 @@ export function Overview() {
   const sortedData = useMemo(() => {
     if (!sortColumn) return filteredData;
     return [...filteredData].sort((a, b) => {
-      const aValue = a[sortColumn];
-      const bValue = b[sortColumn];
+      const aValue = a[sortColumn] ?? "";
+      const bValue = b[sortColumn] ?? "";
       if (aValue < bValue) return sortDirection === "asc" ? -1 : 1;
       if (aValue > bValue) return sortDirection === "asc" ? 1 : -1;
       return 0;
@@ -243,11 +327,6 @@ export function Overview() {
     const delayed7to30 = base.filter((r) => { const d = getDelayedDays(r); return d >= 7 && d <= 30; }).length;
     const delayedOver30 = base.filter((r) => getDelayedDays(r) > 30).length;
 
-    const fnfDelayed = base.filter((r) => {
-      if (r.ndcStage !== "NDC Completed" || r.isFnfCompleted) return false;
-      const days = Math.ceil((new Date().getTime() - new Date(r.lastWorkingDate).getTime()) / (1000 * 60 * 60 * 24));
-      return days > 0;
-    }).length;
 
     const closedFnfClosed = closedCases.filter((r) => r.isFnfClosed).length;
     const closedFnfDone = closedCases.filter((r) => r.isFnfCompleted).length;
@@ -271,7 +350,7 @@ export function Overview() {
 
     return {
       totalNDC, openNDC, closedNDC, recoveryPending, ndcPendingGCC,
-      delayed7to30, delayedOver30, totalDelayed, fnfDelayed,
+      delayed7to30, delayedOver30, totalDelayed,
       closedFnfClosed, closedFnfDone, closedFnfOpen, closedFnfRevision,
       inProgress, pendingApproval, overdue, avgCompletionDays,
     };
@@ -292,9 +371,10 @@ export function Overview() {
 
   const FullScreenTable = ({ data, title }: { data: NDCRecord[]; title: string }) => {
     const [page, setPage] = useState(1);
-    const totalPages = Math.max(1, Math.ceil(data.length / itemsPerPage));
-    const startIndex = (page - 1) * itemsPerPage;
-    const paginatedData = data.slice(startIndex, startIndex + itemsPerPage);
+    const [tableItemsPerPage, setTableItemsPerPage] = useState(20);
+    const totalPages = Math.max(1, Math.ceil(data.length / tableItemsPerPage));
+    const startIndex = (page - 1) * tableItemsPerPage;
+    const paginatedData = data.slice(startIndex, startIndex + tableItemsPerPage);
 
     return (
       <div className="flex flex-col h-full">
@@ -307,8 +387,9 @@ export function Overview() {
                 "Person No.": r.personNumber,
                 "Name": r.employeeName,
                 "Department": r.department,
-                "Last Working Date": r.lastWorkingDate,
-                "NDC Stage": r.ndcStage
+                "Last Working Date": formatDate(r.lastWorkingDate),
+                "NDC Stage": r.ndcStage,
+                "Pending Departments": getPendingDepartments(r),
               }));
               exportToExcel(mappedData, title || "Export");
             }}
@@ -327,6 +408,7 @@ export function Overview() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Department</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Last Working Date</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">NDC Stage</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Pending Departments</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border bg-card">
@@ -335,20 +417,39 @@ export function Overview() {
                   <td className="px-4 py-3 whitespace-nowrap font-medium">{r.personNumber}</td>
                   <td className="px-4 py-3 whitespace-nowrap">{r.employeeName}</td>
                   <td className="px-4 py-3">{r.department}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">{r.lastWorkingDate}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">{formatDate(r.lastWorkingDate)}</td>
                   <td className="px-4 py-3 whitespace-nowrap">{r.ndcStage}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">{getPendingDepartments(r)}</td>
                 </tr>
               ))}
               {data.length === 0 && (
-                <tr><td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">No records found</td></tr>
+                <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">No records found</td></tr>
               )}
             </tbody>
           </table>
         </div>
         {data.length > 0 && (
-          <div className="px-6 py-4 border-t border-border flex items-center justify-between shrink-0 bg-card">
-            <div className="text-sm text-muted-foreground">
-              Showing {startIndex + 1} to {Math.min(startIndex + itemsPerPage, data.length)} of {data.length} records
+          <div className="px-6 py-4 border-t border-border flex flex-wrap items-center justify-between gap-4 shrink-0 bg-card">
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="text-sm text-muted-foreground">
+                Showing {startIndex + 1} to {Math.min(startIndex + tableItemsPerPage, data.length)} of {data.length} records
+              </div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span>Rows per page:</span>
+                <select
+                  value={tableItemsPerPage}
+                  onChange={(e) => {
+                    setTableItemsPerPage(Number(e.target.value));
+                    setPage(1);
+                  }}
+                  className="h-8 px-2 rounded-[4px] border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                >
+                  <option value={20}>20</option>
+                  <option value={30}>30</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+              </div>
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -372,7 +473,7 @@ export function Overview() {
           </div>
         )}
       </div>
-    )
+    );
   };
 
   if (isLoading) return <LoadingScreen />;
@@ -505,7 +606,7 @@ export function Overview() {
           <div onClick={() => setClosedNDCModalOpen(true)} className="cursor-pointer hover:scale-105 transition-transform duration-200">
             <KPICard title="Closed NDC" value={kpis.closedNDC} icon={CheckCircle} colorClass="text-green-600" bgClass="bg-green-50" />
           </div>
-          <div onClick={() => setDelayedCasesModalOpen(true)} className="cursor-pointer hover:scale-105 transition-transform duration-200">
+          <div onClick={() => setNdcDelayedTableOpen(true)} className="cursor-pointer hover:scale-105 transition-transform duration-200">
             <KPICard title="Top Delayed Cases" value={kpis.totalDelayed} icon={AlertCircle} colorClass="text-red-600" bgClass="bg-red-50" />
           </div>
         </div>
@@ -519,7 +620,7 @@ export function Overview() {
             <KPICard title="Pending NDC with GCC" value={kpis.pendingApproval} icon={AlertTriangle} colorClass="text-orange-600" bgClass="bg-orange-50" />
           </div>
           <div onClick={() => setOverdueModalOpen(true)} className="cursor-pointer hover:scale-105 transition-transform duration-200">
-            <KPICard title="Overdue" value={kpis.overdue} icon={XCircle} colorClass="text-red-700" bgClass="bg-red-100" />
+            <KPICard title="NDC Overdue after Exit" value={kpis.overdue} icon={XCircle} colorClass="text-red-700" bgClass="bg-red-100" />
           </div>
           <KPICard
             title="Avg Completion Time"
@@ -633,38 +734,6 @@ export function Overview() {
         </DialogContent>
       </Dialog>
 
-      {/* Top Delayed Cases Modal */}
-      <Dialog open={delayedCasesModalOpen} onOpenChange={setDelayedCasesModalOpen}>
-        <DialogContent className="max-w-2xl sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Top Delayed Cases</DialogTitle>
-          </DialogHeader>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4">
-            <div
-              onClick={() => { setDelayedCasesModalOpen(false); setNdcDelayedTableOpen(true); }}
-              className="cursor-pointer p-6 bg-card border border-border rounded-[4px] hover:bg-muted/50 transition-colors"
-            >
-              <div className="flex items-start justify-between gap-2 mb-1">
-                <span className="text-sm font-medium text-foreground whitespace-nowrap">NDC Delay Cases</span>
-                <Clock className="w-5 h-5 flex-shrink-0 text-red-600" />
-              </div>
-              <p className="text-xs text-muted-foreground mb-2">(View All Delayed NDC Cases)</p>
-              <p className="text-2xl font-bold text-red-600">{kpis.totalDelayed}</p>
-            </div>
-            <div
-              onClick={() => { setDelayedCasesModalOpen(false); setFnfDelayedTableOpen(true); }}
-              className="cursor-pointer p-6 bg-card border border-border rounded-[4px] hover:bg-muted/50 transition-colors"
-            >
-              <div className="flex items-start justify-between gap-2 mb-1">
-                <span className="text-sm font-medium text-foreground whitespace-nowrap">F&F Delay Cases</span>
-                <AlertCircle className="w-5 h-5 flex-shrink-0 text-orange-600" />
-              </div>
-              <p className="text-xs text-muted-foreground mb-2">(View All Delayed F&F Cases)</p>
-              <p className="text-2xl font-bold text-orange-600">{kpis.fnfDelayed}</p>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* Reminder Mail Dialog */}
       <Dialog open={reminderMailDialogOpen} onOpenChange={setReminderMailDialogOpen}>
@@ -760,6 +829,8 @@ export function Overview() {
                   "Name": r.employeeName,
                   "Department": r.department,
                   "Last Working Date": r.lastWorkingDate,
+                  "NDC Initiate Date": r.ndcInitiatedDate || "-",
+                  "Pending With": getPendingDepartments(r),
                   "Days Delayed": getDelayedDays(r)
                 }));
                 exportToExcel(mappedData, "NDC_Delayed_Cases");
@@ -775,10 +846,10 @@ export function Overview() {
         <div className="flex-1 overflow-auto p-6">
           {(() => {
             const allDelayed = mockNDCData.filter(isTopDelayed);
-            const totalPages = Math.max(1, Math.ceil(allDelayed.length / itemsPerPage));
-            const startIndex = (ndcDelayedCurrentPage - 1) * itemsPerPage;
+            const totalPages = Math.max(1, Math.ceil(allDelayed.length / ndcDelayedItemsPerPage));
+            const startIndex = (ndcDelayedCurrentPage - 1) * ndcDelayedItemsPerPage;
             const sortedDelayed = [...allDelayed].sort((a, b) => getDelayedDays(b) - getDelayedDays(a));
-            const paginatedDelayed = sortedDelayed.slice(startIndex, startIndex + itemsPerPage);
+            const paginatedDelayed = sortedDelayed.slice(startIndex, startIndex + ndcDelayedItemsPerPage);
 
             return (
               <div className="h-full flex flex-col">
@@ -791,12 +862,14 @@ export function Overview() {
                         <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">Name</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">Department</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">Last Working Date</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">NDC Initiate Date</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">Pending With</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">Days Delayed</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border bg-card">
                       {allDelayed.length === 0 ? (
-                        <tr><td colSpan={5} className="px-4 py-6 text-center text-muted-foreground">No delayed records found</td></tr>
+                        <tr><td colSpan={7} className="px-4 py-6 text-center text-muted-foreground">No delayed records found</td></tr>
                       ) : paginatedDelayed.map((record) => {
                         const days = getDelayedDays(record);
                         const badgeColor = days > 30
@@ -809,7 +882,11 @@ export function Overview() {
                             <td className="px-4 py-3 whitespace-nowrap font-medium">{record.personNumber}</td>
                             <td className="px-4 py-3 whitespace-nowrap">{record.employeeName}</td>
                             <td className="px-4 py-3">{record.department}</td>
-                            <td className="px-4 py-3 whitespace-nowrap">{record.lastWorkingDate}</td>
+                            <td className="px-4 py-3 whitespace-nowrap">{formatDate(record.lastWorkingDate)}</td>
+                            <td className="px-4 py-3 whitespace-nowrap">{formatDate(record.ndcInitiatedDate)}</td>
+                            <td className="px-4 py-3 text-sm min-w-[220px] whitespace-normal" title={getPendingDepartments(record)}>
+                              {getPendingDepartments(record)}
+                            </td>
                             <td className="px-4 py-3 whitespace-nowrap">
                               <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${badgeColor}`}>{days} days</span>
                             </td>
@@ -820,9 +897,27 @@ export function Overview() {
                   </table>
                 </div>
                 {allDelayed.length > 0 && (
-                  <div className="mt-4 flex items-center justify-between shrink-0">
-                    <div className="text-sm text-muted-foreground">
-                      Showing {startIndex + 1} to {Math.min(startIndex + itemsPerPage, allDelayed.length)} of {allDelayed.length} records
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-4 shrink-0">
+                    <div className="flex flex-wrap items-center gap-4">
+                      <div className="text-sm text-muted-foreground">
+                        Showing {startIndex + 1} to {Math.min(startIndex + ndcDelayedItemsPerPage, allDelayed.length)} of {allDelayed.length} records
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <span>Rows per page:</span>
+                        <select
+                          value={ndcDelayedItemsPerPage}
+                          onChange={(e) => {
+                            setNdcDelayedItemsPerPage(Number(e.target.value));
+                            setNdcDelayedCurrentPage(1);
+                          }}
+                          className="h-8 px-2 rounded-[4px] border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                        >
+                          <option value={20}>20</option>
+                          <option value={30}>30</option>
+                          <option value={50}>50</option>
+                          <option value={100}>100</option>
+                        </select>
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <button onClick={() => setNdcDelayedCurrentPage(Math.max(1, ndcDelayedCurrentPage - 1))} disabled={ndcDelayedCurrentPage === 1} className="p-2 rounded-[4px] border border-border hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"><ChevronLeft className="w-4 h-4" /></button>
@@ -837,118 +932,6 @@ export function Overview() {
         </div>
       </FullScreenModal>
 
-      {/* F&F Delayed Table Modal */}
-      <FullScreenModal
-        open={fnfDelayedTableOpen}
-        onClose={() => setFnfDelayedTableOpen(false)}
-        title="F&F Delayed Cases"
-        headerActions={(() => {
-          const fnfDelayedData = mockNDCData.filter((r) => {
-            if (r.ndcStage !== "NDC Completed" || r.isFnfCompleted) return false;
-            return Math.ceil((new Date().getTime() - new Date(r.lastWorkingDate).getTime()) / (1000 * 60 * 60 * 24)) > 0;
-          });
-          return (
-            <div className="flex items-center gap-3">
-              <button
-                disabled={fnfDelayedData.length === 0}
-                onClick={() => {
-                  setReminderMailEmailTo("");
-                  setReminderMailType("ndc_delayed");
-                  setReminderMailDialogOpen(true);
-                }}
-                className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground text-sm rounded-[4px] hover:bg-primary/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                <Mail className="w-4 h-4" />
-                Send Reminder
-              </button>
-              <button
-                disabled={fnfDelayedData.length === 0}
-                onClick={() => {
-                  const mappedData = fnfDelayedData.map(r => ({
-                    "Person Number": r.personNumber,
-                    "Name": r.employeeName,
-                    "Department": r.department,
-                    "Last Working Date": r.lastWorkingDate,
-                    "F&F Status": r.fnfStatus,
-                    "Days Delayed": Math.ceil((new Date().getTime() - new Date(r.lastWorkingDate).getTime()) / (1000 * 60 * 60 * 24))
-                  }));
-                  exportToExcel(mappedData, "FnF_Delayed_Cases");
-                }}
-                className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground text-sm rounded-[4px] hover:bg-primary/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                <Download className="w-4 h-4" />
-                Export to Excel
-              </button>
-            </div>
-          );
-        })()}
-      >
-        <div className="flex-1 overflow-auto p-6">
-          {(() => {
-            const fnfDelayedData = mockNDCData.filter((r) => {
-              if (r.ndcStage !== "NDC Completed" || r.isFnfCompleted) return false;
-              return Math.ceil((new Date().getTime() - new Date(r.lastWorkingDate).getTime()) / (1000 * 60 * 60 * 24)) > 0;
-            });
-            const totalPages = Math.max(1, Math.ceil(fnfDelayedData.length / itemsPerPage));
-            const startIndex = (fnfDelayedCurrentPage - 1) * itemsPerPage;
-            const paginatedDelayed = fnfDelayedData.slice(startIndex, startIndex + itemsPerPage);
-            return (
-              <div className="h-full flex flex-col">
-                <h3 className="text-base font-semibold text-orange-800 mb-3 shrink-0">
-                  F&F delayed cases <span className="ml-2 text-sm font-normal text-muted-foreground">({fnfDelayedData.length} records)</span>
-                </h3>
-                <div className="overflow-x-auto rounded-[4px] border border-orange-200 flex-1">
-                  <table className="w-full text-sm">
-                    <thead className="bg-orange-50 sticky top-0 z-10">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">Person Number</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">Name</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">Department</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">Last Working Date</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">F&F Status</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">Days Delayed</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-orange-100 bg-card">
-                      {fnfDelayedData.length === 0 ? (
-                        <tr><td colSpan={6} className="px-4 py-6 text-center text-muted-foreground">No records found</td></tr>
-                      ) : paginatedDelayed.map((record) => {
-                        const delayDays = Math.ceil((new Date().getTime() - new Date(record.lastWorkingDate).getTime()) / (1000 * 60 * 60 * 24));
-                        return (
-                          <tr key={record.id} className="hover:bg-orange-50/50">
-                            <td className="px-4 py-3 whitespace-nowrap font-medium">{record.personNumber}</td>
-                            <td className="px-4 py-3 whitespace-nowrap">{record.employeeName}</td>
-                            <td className="px-4 py-3">{record.department}</td>
-                            <td className="px-4 py-3 whitespace-nowrap">{record.lastWorkingDate}</td>
-                            <td className="px-4 py-3">
-                              <span className="inline-flex items-center px-2 py-1 rounded-[4px] text-xs font-medium bg-orange-100 text-orange-700 whitespace-nowrap">{record.fnfStatus}</span>
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap">
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700">{delayDays} days</span>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                {fnfDelayedData.length > 0 && (
-                  <div className="mt-4 flex items-center justify-between shrink-0">
-                    <div className="text-sm text-muted-foreground">
-                      Showing {startIndex + 1} to {Math.min(startIndex + itemsPerPage, fnfDelayedData.length)} of {fnfDelayedData.length} records
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button onClick={() => setFnfDelayedCurrentPage(Math.max(1, fnfDelayedCurrentPage - 1))} disabled={fnfDelayedCurrentPage === 1} className="p-2 rounded-[4px] border border-border hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"><ChevronLeft className="w-4 h-4" /></button>
-                      <span className="text-sm text-foreground">Page {fnfDelayedCurrentPage} of {totalPages}</span>
-                      <button onClick={() => setFnfDelayedCurrentPage(Math.min(totalPages, fnfDelayedCurrentPage + 1))} disabled={fnfDelayedCurrentPage === totalPages} className="p-2 rounded-[4px] border border-border hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"><ChevronRight className="w-4 h-4" /></button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })()}
-        </div>
-      </FullScreenModal>
 
       {/* In Progress Modal */}
       <FullScreenModal open={inProgressModalOpen} onClose={() => setInProgressModalOpen(false)} title="Pending NDC with departments">
@@ -961,8 +944,8 @@ export function Overview() {
       </FullScreenModal>
 
       {/* Overdue Modal */}
-      <FullScreenModal open={overdueModalOpen} onClose={() => setOverdueModalOpen(false)} title="Overdue">
-        <FullScreenTable data={mockNDCData.filter(isOverdue)} title="Overdue Cases" />
+      <FullScreenModal open={overdueModalOpen} onClose={() => setOverdueModalOpen(false)} title="NDC Overdue after Exit">
+        <FullScreenTable data={mockNDCData.filter(isOverdue)} title="NDC Overdue after Exit Cases" />
       </FullScreenModal>
 
       <FilterBar
@@ -986,14 +969,18 @@ export function Overview() {
           currentPage={currentPage}
           setCurrentPage={setCurrentPage}
           itemsPerPage={itemsPerPage}
+          setItemsPerPage={setItemsPerPage}
           onSort={handleSort}
           getRowHighlight={getRowHighlight}
+          onDeleteRecord={handleDeleteRecord}
           onExport={(visibleColumns) => {
             const mappedData = sortedData.map(r => {
               const obj: any = {};
               visibleColumns.forEach(col => {
                 let value = r[col.key as keyof NDCRecord];
-                if (col.key.includes("ApprovalStatus")) {
+                if (col.key === "pendingDepartments") {
+                  value = getPendingDepartments(r);
+                } else if (col.key.includes("ApprovalStatus")) {
                   if (value === "PENDING") value = "Pending";
                   else if (value === "IN_PROGRESS") value = "In Progress";
                   else if (value === "COMPLETED") value = "Completed";
@@ -1009,6 +996,59 @@ export function Overview() {
           }}
         />
       </div>
+
+      {/* Super Admin Delete Employee Confirmation Dialog */}
+      <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="w-5 h-5 text-red-600" />
+              Delete Employee Permanently
+            </DialogTitle>
+          </DialogHeader>
+          <div className="p-4 space-y-4">
+            <p className="text-sm text-foreground">
+              Are you sure you want to permanently delete employee{" "}
+              <span className="font-semibold text-red-600">{recordToDelete?.employeeName}</span>{" "}
+              (Person Number: <span className="font-semibold">{recordToDelete?.personNumber}</span>)?
+            </p>
+            <p className="text-xs text-muted-foreground bg-red-50 dark:bg-red-950/40 p-2.5 rounded border border-red-200 dark:border-red-900/50">
+              ⚠️ This will remove the employee from NDC tracking and <strong>permanently exclude</strong> them from all future automated SharePoint and manual Excel syncs.
+            </p>
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                Reason for Deletion (Optional)
+              </label>
+              <input
+                type="text"
+                value={deleteReason}
+                onChange={(e) => setDeleteReason(e.target.value)}
+                placeholder="e.g. Test record, exited before cutoff..."
+                className="w-full px-3 py-2 text-sm border border-border rounded-[4px] bg-input-background focus:outline-none focus:ring-2 focus:ring-red-500"
+              />
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button
+                disabled={isDeleting}
+                onClick={confirmDeleteRecord}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-[4px] hover:bg-red-700 transition-colors flex items-center justify-center gap-2 text-sm font-medium disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {isDeleting ? "Deleting..." : "Permanently Delete"}
+              </button>
+              <button
+                disabled={isDeleting}
+                onClick={() => {
+                  setDeleteConfirmOpen(false);
+                  setRecordToDelete(null);
+                }}
+                className="px-4 py-2 bg-muted text-foreground rounded-[4px] hover:bg-muted/80 transition-colors text-sm font-medium"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

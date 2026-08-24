@@ -28,7 +28,7 @@ export function AccessDenied() {
             Your access request to the NDC & F&F Tracking System was not approved.
           </p>
           <p className="mt-2 text-xs text-slate-500">
-            If you require administrative privileges, please contact the system administrator (sahil.singh1@adani.com or COGN213262@adani.com) to restore access.
+            If you require administrative privileges, please contact the system administrator to restore access.
           </p>
 
           {user?.email && (
