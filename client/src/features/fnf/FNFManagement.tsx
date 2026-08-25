@@ -490,8 +490,12 @@ export function FNFManagement() {
                       </button>
                       <button
                         onClick={() => { setSelectedRecord(record); setActionDialogOpen(true); }}
-                        className="p-2 rounded-[4px] bg-green-50 text-green-600 hover:bg-green-100 transition-colors"
-                        title="Confirm F&F status"
+                        disabled={record.fnfDocumentCount === 0}
+                        className={`p-2 rounded-[4px] transition-colors ${record.fnfDocumentCount === 0
+                            ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                            : 'bg-green-50 text-green-600 hover:bg-green-100'
+                          }`}
+                        title={record.fnfDocumentCount === 0 ? "No document found to confirm" : "Confirm F&F status"}
                       >
                         <CheckSquare className="w-4 h-4" />
                       </button>
