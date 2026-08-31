@@ -3,7 +3,7 @@ from datetime import date
 from typing import List
 
 from fastapi import BackgroundTasks, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 
@@ -31,16 +31,17 @@ class EmailRecipientService:
 
     @staticmethod
     async def add_recipient(recipient: EmailRecipientSchema, db: AsyncSession) -> dict:
-        """Add a new email recipient with duplicate check."""
+        """Add a new email recipient with duplicate check scoped per department."""
         try:
-            # Duplicate email check
+            # Duplicate check: prevent duplicate email within the same department
             existing = await db.execute(
                 select(EmailRecipient).where(
-                    EmailRecipient.email == recipient.email.strip().lower()
+                    EmailRecipient.email == recipient.email.strip().lower(),
+                    func.lower(func.trim(EmailRecipient.department)) == recipient.department.strip().lower(),
                 )
             )
             if existing.scalar_one_or_none():
-                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A recipient with this email already exists.")
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A recipient with this email already exists in this department.")
 
             new_rec = EmailRecipient(name=recipient.name, email=recipient.email.strip().lower(), department=recipient.department, role=recipient.role)
             db.add(new_rec)
@@ -54,22 +55,23 @@ class EmailRecipientService:
 
     @staticmethod
     async def update_recipient(id: int, recipient: EmailRecipientSchema, db: AsyncSession) -> dict:
-        """Update an existing email recipient with duplicate check."""
+        """Update an existing email recipient with duplicate check scoped per department."""
         try:
             res = await db.execute(select(EmailRecipient).where(EmailRecipient.id == id))
             rec = res.scalar_one_or_none()
             if not rec:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
 
-            # Duplicate email check – exclude the current record from the check
+            # Duplicate check – exclude current record from check within the same department
             dup = await db.execute(
                 select(EmailRecipient).where(
                     EmailRecipient.email == recipient.email.strip().lower(),
+                    func.lower(func.trim(EmailRecipient.department)) == recipient.department.strip().lower(),
                     EmailRecipient.id != id,
                 )
             )
             if dup.scalar_one_or_none():
-                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Another recipient with this email already exists.")
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Another recipient with this email already exists in this department.")
 
             rec.name = recipient.name
             rec.email = recipient.email.strip().lower()

@@ -290,6 +290,15 @@ class EmailService:
             msg["Subject"] = subject_line
             msg["From"] = smtp_from
             msg["To"] = ", ".join(recipients_list)
+
+            # CC recipient for F&F / GCC HR reminder types
+            envelope_recipients = list(recipients_list)
+            if reminder_type in ("fnf_open", "fnf_revision", "fnf_delayed"):
+                cc_recipient = os.getenv("FNF_EMAIL_CC") or os.getenv("EMAIL_CC", "")
+                if cc_recipient:
+                    msg["Cc"] = cc_recipient
+                    envelope_recipients.append(cc_recipient)
+
             msg.attach(MIMEText(html_body, "html"))
 
             try:
@@ -300,9 +309,9 @@ class EmailService:
                         server.ehlo()
                     if smtp_password:
                         server.login(smtp_user, smtp_password)
-                    server.sendmail(smtp_from, recipients_list, msg.as_string())
+                    server.sendmail(smtp_from, envelope_recipients, msg.as_string())
 
-                logger.info("%s sent to %s (%d records)", subj_title, ", ".join(recipients_list), len(records))
+                logger.info("%s sent to %s (CC: %s, %d records)", subj_title, ", ".join(recipients_list), msg.get("Cc", "None"), len(records))
                 return {
                     "success": True,
                     "message": f"Reminder email sent to {', '.join(recipients_list)} with {len(records)} records.",
@@ -444,10 +453,7 @@ class EmailService:
             # Build list of envelope recipients for SMTP sendmail
             recipients = [email_to]
             if cc_recipient:
-                cc_list = [c.strip() for c in cc_recipient.split(",") if c.strip()]
-                for cc_addr in cc_list:
-                    if cc_addr not in recipients:
-                        recipients.append(cc_addr)
+                recipients.append(cc_recipient)
         
             # Attach F&F document(s) from SharePoint or local folder as fallback
             attached_from_sharepoint = False
@@ -775,6 +781,14 @@ class EmailService:
             msg["Subject"] = subject
             msg["From"] = smtp_from
             msg["To"] = ", ".join(recipients_list)
+
+            # CC recipient for F&F Team revision comment email
+            envelope_recipients = list(recipients_list)
+            cc_recipient = os.getenv("FNF_EMAIL_CC") or os.getenv("EMAIL_CC", "")
+            if cc_recipient:
+                msg["Cc"] = cc_recipient
+                envelope_recipients.append(cc_recipient)
+
             msg.attach(MIMEText(html_body, "html"))
 
             try:
@@ -785,8 +799,8 @@ class EmailService:
                         server.ehlo()
                     if smtp_user and smtp_password:
                         server.login(smtp_user, smtp_password)
-                    server.sendmail(smtp_from, recipients_list, msg.as_string())
-                logger.info(f"Successfully sent F&F revision comment email for {record.person_number} to {', '.join(recipients_list)}")
+                    server.sendmail(smtp_from, envelope_recipients, msg.as_string())
+                logger.info(f"Successfully sent F&F revision comment email for {record.person_number} to {', '.join(recipients_list)} (CC: {msg.get('Cc', 'None')})")
                 return True
             except Exception as smtp_err:
                 logger.error(f"SMTP error sending F&F revision comment email: {smtp_err}")
@@ -947,6 +961,16 @@ class EmailService:
             msg["Subject"] = subject
             msg["From"] = smtp_from
             msg["To"] = ", ".join(recipients_list)
+
+            # CC recipient for GCC HR and F&F Team daily notifications
+            envelope_recipients = list(recipients_list)
+            clean_dept_lower = clean_dept.lower()
+            if clean_dept_lower in ("gcc hr", "f&f team", "f&f open", "f&f revision required", "f&f revision", "fnf team", "fnf"):
+                cc_recipient = os.getenv("FNF_EMAIL_CC") or os.getenv("EMAIL_CC", "")
+                if cc_recipient:
+                    msg["Cc"] = cc_recipient
+                    envelope_recipients.append(cc_recipient)
+
             msg.attach(MIMEText(html_body, "html"))
 
             try:
@@ -957,8 +981,8 @@ class EmailService:
                         server.ehlo()
                     if smtp_password:
                         server.login(smtp_user, smtp_password)
-                    server.sendmail(smtp_from, recipients_list, msg.as_string())
-                logger.info(f"Successfully sent {stage_name} email with {len(records)} records to {', '.join(recipients_list)}.")
+                    server.sendmail(smtp_from, envelope_recipients, msg.as_string())
+                logger.info(f"Successfully sent {stage_name} email with {len(records)} records to {', '.join(recipients_list)} (CC: {msg.get('Cc', 'None')}).")
                 return True
             except Exception as e:
                 logger.error(f"Failed to send {stage_name} email to {', '.join(recipients_list)}: {e}")
