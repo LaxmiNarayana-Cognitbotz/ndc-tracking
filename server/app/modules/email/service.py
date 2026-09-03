@@ -114,6 +114,8 @@ class EmailService:
                     status_td = '<td style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;"><span style="color:#0b3d91;font-weight:600;">Open</span></td>'
                 elif reminder_type == "fnf_revision":
                     status_td = '<td style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;"><span style="background-color:#ffe5e5;color:#d62828;padding:4px 10px;border-radius:12px;font-weight:600;display:inline-block;">Revision Required</span></td>'
+                elif reminder_type == "fnf_paid":
+                    status_td = '<td style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;"><span style="background-color:#fef3c7;color:#b45309;padding:4px 10px;border-radius:12px;font-weight:600;display:inline-block;">F&amp;F Paid (DMS Pending)</span></td>'
                 else:
                     status_td = f'<td style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;"><span style="background-color:#ffe5e5;color:#d62828;padding:4px 10px;border-radius:12px;font-weight:600;display:inline-block;">{days} Days</span></td>'
 
@@ -141,6 +143,11 @@ class EmailService:
                 intro = f"Please find below the list of the F&F delayed cases identified as of today ({EmailService._fmt_date(date.today())})."
                 col_5 = "Days Delayed"
                 outro = "Kindly review and expedite the pending actions to ensure timely closure."
+            elif reminder_type == "fnf_paid":
+                title = "F&F Paid (Not in DMS) — DMS Upload Pending"
+                intro = f"Please find below the list of F&F paid employees whose DMS document upload is still pending as of today ({EmailService._fmt_date(date.today())})."
+                col_5 = "F&F Status"
+                outro = "Kindly upload the DMS documents for these employees at the earliest to close the settlement loop."
             else:
                 title = "NDC Delayed Cases Report"
                 intro = f"Please find below the top delayed NDC cases identified as of {EmailService._fmt_date(date.today())}."
@@ -282,6 +289,9 @@ class EmailService:
             elif reminder_type == "fnf_delayed":
                 subj_title = "F&F Delayed Cases Reminder"
                 subject_line = f"{subj_title} – {len(records)} Records ({EmailService._fmt_date(date.today())})"
+            elif reminder_type == "fnf_paid":
+                subj_title = "F&F Paid — DMS Upload Pending"
+                subject_line = f"{subj_title} – {len(records)} Records ({EmailService._fmt_date(date.today())})"
             else:
                 subj_title = "NDC Delayed Cases Reminder"
                 subject_line = f"Reminder: Top Delayed NDC Cases ({EmailService._fmt_date(date.today())})"
@@ -293,7 +303,7 @@ class EmailService:
 
             # CC recipient for F&F / GCC HR reminder types
             envelope_recipients = list(recipients_list)
-            if reminder_type in ("fnf_open", "fnf_revision", "fnf_delayed"):
+            if reminder_type in ("fnf_open", "fnf_revision", "fnf_delayed", "fnf_paid"):
                 cc_recipient = os.getenv("FNF_EMAIL_CC") or os.getenv("EMAIL_CC", "")
                 if cc_recipient:
                     msg["Cc"] = cc_recipient
@@ -1250,6 +1260,7 @@ class EmailService:
             rm_groups = {}  # key: (rm_name, rm_email) -> value: list of NdcRecord
             duplicate_rm_records = []  # list of (rm_name, rec)
             fnf_revision_records = []  # list of NdcRecord for F&F Revision Required (sent only once)
+            fnf_paid_records = []  # list of NdcRecord for F&F Paid (Not in DMS)
         
             departments = [
                 ("HR", dept_email_map.get("hr")),
@@ -1331,12 +1342,25 @@ class EmailService:
                     elif dept_name == "F&F Team":
                         # Specific rule for F&F Team (F&F Open list)
                         is_eligible = rec.ndc_stage == "NDC Completed" and approvals.get("gcc hr") == "completed"
-                        is_fnf_open = is_eligible and (not rec.is_fnf_completed) and (not rec.is_fnf_revision)
+                        is_fnf_open = (
+                            is_eligible
+                            and (not rec.is_fnf_completed)
+                            and (not rec.is_fnf_revision)
+                            and (not getattr(rec, "is_fnf_paid", False))
+                            and (not getattr(rec, "is_fnf_closed", False))
+                        )
                         if is_fnf_open:
                             emails_to_send[dept_name].append(rec)
                     else:
                         if current_status == "pending":
                             emails_to_send[dept_name].append(rec)
+
+                # Collect F&F Paid records (where payment done but DMS pending — neither completed nor closed)
+                is_fnf_paid = getattr(rec, "is_fnf_paid", False)
+                is_fnf_completed = getattr(rec, "is_fnf_completed", False)
+                is_fnf_closed = getattr(rec, "is_fnf_closed", False)
+                if is_fnf_paid and not is_fnf_completed and not is_fnf_closed:
+                    fnf_paid_records.append(rec)
 
                 # Collect new F&F Revision Required records (to send only once to F&F Team)
                 is_fnf_revision = getattr(rec, "is_fnf_revision", False)
@@ -1401,6 +1425,43 @@ class EmailService:
                     EmailService.send_notification_email(records_for_dept, recipient, dept_name)
                 else:
                     logger.info(f"No pending records for {dept_name}. Skipping email.")
+
+            # Send daily 10:00 AM F&F Paid (Not in DMS) reminder to F&F Team
+            if fnf_paid_records:
+                ff_recipient_list = dept_email_map.get("f&f team")
+                ff_recipient = ", ".join(ff_recipient_list) if ff_recipient_list else os.getenv("EMAIL_RECIPIENT", "")
+                if ff_recipient:
+                    logger.info(f"Sending daily 10:00 AM F&F Paid reminder with {len(fnf_paid_records)} records to {ff_recipient}...")
+                    paid_payload = [
+                        {
+                            "id": r.id,
+                            "person_number": str(r.person_number) if r.person_number else "",
+                            "employee_name": r.employee_name or "",
+                            "department": r.department or "—",
+                            "last_working_date": (
+                                r.last_working_date.strftime("%Y-%m-%d")
+                                if r.last_working_date
+                                else ""
+                            ),
+                            "days_delayed": EmailService._days_delayed(r.last_working_date),
+                        }
+                        for r in fnf_paid_records
+                    ]
+                    paid_payload.sort(key=lambda x: x["last_working_date"] or "", reverse=True)
+                    try:
+                        res = await EmailService.send_delayed_reminder(
+                            paid_payload,
+                            recipient=ff_recipient,
+                            reminder_type="fnf_paid",
+                        )
+                        if res.get("success"):
+                            logger.info("Successfully sent daily 10:00 AM F&F Paid reminder email.")
+                        else:
+                            logger.error(f"Failed to send daily 10:00 AM F&F Paid reminder: {res.get('message')}")
+                    except Exception as e:
+                        logger.error(f"Error sending daily 10:00 AM F&F Paid reminder email: {e}")
+                else:
+                    logger.warning("F&F Team email recipient not configured. Skipping daily 10:00 AM F&F Paid reminder email.")
 
             # NOTE: Daily F&F Revision Required email is disabled.
             # Revision emails are now sent instantly when admin marks "Needs Revision" with a comment.

@@ -126,6 +126,7 @@ class CommonService:
                 "is_fnf_completed": record.is_fnf_completed,
                 "is_fnf_closed": record.is_fnf_closed,
                 "is_fnf_revision": record.is_fnf_revision,
+                "is_fnf_paid": getattr(record, "is_fnf_paid", False),
                 "gcc_initiate_date": (
                     gcc_initiate.strftime("%Y-%m-%d") if gcc_initiate else ""
                 ),
@@ -263,6 +264,19 @@ class CommonService:
 
             if body.fnf_revision_comment is not None:
                 record.fnf_revision_comment = body.fnf_revision_comment
+
+            if body.is_fnf_paid is not None:
+                record.is_fnf_paid = body.is_fnf_paid
+                if body.is_fnf_paid:
+                    # Block the 30-min auto-email cron from sending a settlement email
+                    # to this employee — payment was done outside the normal DMS flow
+                    # (old employee / manually settled). Suppress auto-email permanently.
+                    record.is_fnf_email_sent = True
+                    logger.info(
+                        "F&F Paid flagged for %s (%s) — is_fnf_email_sent set to True to suppress auto-email cron.",
+                        getattr(record, "employee_name", "N/A"),
+                        getattr(record, "person_number", "N/A"),
+                    )
 
             if body.fnf_document_count is not None:
                 record.fnf_document_count = body.fnf_document_count

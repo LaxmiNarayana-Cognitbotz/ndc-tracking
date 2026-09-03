@@ -56,6 +56,7 @@ export interface NDCRecord {
   isFnfCompleted: boolean;
   isFnfClosed: boolean;
   isFnfRevision: boolean;
+  isFnfPaid: boolean;
   gccInitiateDate: string;
   fnfDocumentCount: number;
   fnfRevisionStartDate?: string;

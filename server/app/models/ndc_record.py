@@ -42,6 +42,8 @@ class NdcRecord(Base):
     is_fnf_revision = Column(Boolean, default=False, nullable=False, server_default="false")
     is_fnf_email_sent = Column(Boolean, default=False, nullable=False, server_default="false")
     is_fnf_revision_email_sent = Column(Boolean, default=False, nullable=False, server_default="false")
+    # True when finance has paid but DMS/SharePoint document upload is still pending
+    is_fnf_paid = Column(Boolean, default=False, nullable=False, server_default="false")
     fnf_completed_date = Column(Date, nullable=True)
     gcc_initiate_date = Column(Date, nullable=True)
     fnf_document_count = Column(Integer, default=0, nullable=False, server_default="0")

@@ -7,7 +7,7 @@ import { PPTDownloadButton } from "../../components/common/PPTDownloadButton";
 import { FullScreenModal } from "../../components/common/FullScreenModal";
 import { LoadingScreen } from "../../components/common/LoadingScreen";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../components/ui/dialog";
-import { FileText, Download, Filter, CheckCircle, XCircle, Clock, Send, CheckSquare, Mail, TrendingUp, ChevronLeft, ChevronRight, AlertCircle } from "lucide-react";
+import { FileText, Download, Filter, CheckCircle, XCircle, Clock, Send, CheckSquare, Mail, TrendingUp, ChevronLeft, ChevronRight, AlertCircle, IndianRupee } from "lucide-react";
 import { toast } from "sonner";
 
 export function FNFManagement() {
@@ -47,6 +47,11 @@ export function FNFManagement() {
   const [fnfDelayedCurrentPage, setFnfDelayedCurrentPage] = useState(1);
   const [revisionComment, setRevisionComment] = useState("");
   const [showRevisionComment, setShowRevisionComment] = useState(false);
+  const [paidConfirmRecord, setPaidConfirmRecord] = useState<NDCRecord | null>(null);
+  const [fnfPaidTableOpen, setFnfPaidTableOpen] = useState(false);
+  const [fnfPaidCurrentPage, setFnfPaidCurrentPage] = useState(1);
+  const [fnfPaidItemsPerPage, setFnfPaidItemsPerPage] = useState(20);
+  const [markingPaid, setMarkingPaid] = useState(false);
 
   // Reset to first page on filter change
   useEffect(() => {
@@ -91,13 +96,28 @@ export function FNFManagement() {
 
   const eligibleRecords = useMemo(() => mockNDCData.filter(isEligible), [mockNDCData]);
 
+  // F&F Paid: paid but DMS not yet uploaded (neither completed nor closed)
+  const fnfPaidData = useMemo(() => {
+    return eligibleRecords.filter(
+      (r) =>
+        getProp(r, "isFnfPaid", "is_fnf_paid") &&
+        !getProp(r, "isFnfCompleted", "is_fnf_completed") &&
+        !getProp(r, "isFnfClosed", "is_fnf_closed")
+    );
+  }, [eligibleRecords]);
+
+  const fnfPaidTotalPages = Math.max(1, Math.ceil(fnfPaidData.length / fnfPaidItemsPerPage));
+  const fnfPaidStartIndex = (fnfPaidCurrentPage - 1) * fnfPaidItemsPerPage;
+  const fnfPaidPaginated = fnfPaidData.slice(fnfPaidStartIndex, fnfPaidStartIndex + fnfPaidItemsPerPage);
+
   const filteredData = useMemo(() => {
     let filtered = eligibleRecords;
     if (statusFilter) {
       if (statusFilter === "Done") filtered = filtered.filter((r) => getProp(r, "isFnfCompleted", "is_fnf_completed") && !getProp(r, "isFnfClosed", "is_fnf_closed"));
       else if (statusFilter === "Closed") filtered = filtered.filter((r) => getProp(r, "isFnfClosed", "is_fnf_closed"));
-      else if (statusFilter === "Open") filtered = filtered.filter((r) => !getProp(r, "isFnfCompleted", "is_fnf_completed") && !getProp(r, "isFnfClosed", "is_fnf_closed") && !getProp(r, "isFnfRevision", "is_fnf_revision"));
+      else if (statusFilter === "Open") filtered = filtered.filter((r) => !getProp(r, "isFnfCompleted", "is_fnf_completed") && !getProp(r, "isFnfClosed", "is_fnf_closed") && !getProp(r, "isFnfRevision", "is_fnf_revision") && !getProp(r, "isFnfPaid", "is_fnf_paid"));
       else if (statusFilter === "Revision Required") filtered = filtered.filter((r) => getProp(r, "isFnfRevision", "is_fnf_revision"));
+      else if (statusFilter === "FnfPaid") filtered = filtered.filter((r) => getProp(r, "isFnfPaid", "is_fnf_paid") && !getProp(r, "isFnfCompleted", "is_fnf_completed") && !getProp(r, "isFnfClosed", "is_fnf_closed"));
     }
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
@@ -200,7 +220,7 @@ export function FNFManagement() {
   const fnfStats = useMemo(() => {
     const total = eligibleRecords.length;
     const done = eligibleRecords.filter((r) => getProp(r, "isFnfCompleted", "is_fnf_completed") || getProp(r, "isFnfClosed", "is_fnf_closed")).length;
-    const open = eligibleRecords.filter((r) => !getProp(r, "isFnfCompleted", "is_fnf_completed") && !getProp(r, "isFnfClosed", "is_fnf_closed") && !getProp(r, "isFnfRevision", "is_fnf_revision")).length;
+    const open = eligibleRecords.filter((r) => !getProp(r, "isFnfCompleted", "is_fnf_completed") && !getProp(r, "isFnfClosed", "is_fnf_closed") && !getProp(r, "isFnfRevision", "is_fnf_revision") && !getProp(r, "isFnfPaid", "is_fnf_paid")).length;
     const revision = eligibleRecords.filter((r) => getProp(r, "isFnfRevision", "is_fnf_revision")).length;
     const closed = eligibleRecords.filter((r) => getProp(r, "isFnfClosed", "is_fnf_closed")).length;
 
@@ -212,7 +232,8 @@ export function FNFManagement() {
       ? Math.round(tatRecordsWithDaysLWD.reduce((sum, item) => sum + item.days, 0) / tatRecordsWithDaysLWD.length)
       : 0;
 
-    return { total, done, open, revision, closed, avgTAT, avgTATLWD };
+    const paid = fnfPaidData.length;
+    return { total, done, open, revision, closed, avgTAT, avgTATLWD, paid };
   }, [eligibleRecords, tatRecordsWithDays, tatRecordsWithDaysLWD]);
 
   const handleAction = (record: NDCRecord, action: "closed" | "revision") => {
@@ -257,10 +278,10 @@ export function FNFManagement() {
   const handleKPIClick = (type: "total" | "done" | "open" | "revision" | "closed" | "avgTAT" | "avgTATLWD" | "fnfDelayed") => {
     const map = {
       total: { title: "Total F&F In Process", data: eligibleRecords },
-      done: { title: "F&F Completed", data: eligibleRecords.filter((r) => r.isFnfCompleted || r.isFnfClosed) },
-      open: { title: "F&F Open", data: eligibleRecords.filter((r) => !r.isFnfCompleted && !r.isFnfClosed && !r.isFnfRevision) },
-      revision: { title: "Revision Required", data: eligibleRecords.filter((r) => r.isFnfRevision) },
-      closed: { title: "F&F Closed", data: eligibleRecords.filter((r) => r.isFnfClosed) },
+      done: { title: "F&F Completed", data: eligibleRecords.filter((r) => getProp(r, "isFnfCompleted", "is_fnf_completed") || getProp(r, "isFnfClosed", "is_fnf_closed")) },
+      open: { title: "F&F Open", data: eligibleRecords.filter((r) => !getProp(r, "isFnfCompleted", "is_fnf_completed") && !getProp(r, "isFnfClosed", "is_fnf_closed") && !getProp(r, "isFnfRevision", "is_fnf_revision") && !getProp(r, "isFnfPaid", "is_fnf_paid")) },
+      revision: { title: "Revision Required", data: eligibleRecords.filter((r) => getProp(r, "isFnfRevision", "is_fnf_revision")) },
+      closed: { title: "F&F Closed", data: eligibleRecords.filter((r) => getProp(r, "isFnfClosed", "is_fnf_closed")) },
       avgTAT: { title: "F&F TAT w.r.t NDC Closure Date", data: tatRecords },
       avgTATLWD: { title: "F&F TAT w.r.t Last Working Date", data: tatRecordsLWD },
       fnfDelayed: { title: "F&F Delayed Cases", data: fnfDelayedData },
@@ -274,6 +295,7 @@ export function FNFManagement() {
     if (record.isFnfClosed) return "Closed";
     if (record.isFnfCompleted) return "Completed";
     if (record.isFnfRevision) return "Revision Required";
+    if (getProp(record, "isFnfPaid", "is_fnf_paid")) return "F&F Paid";
     return "Open";
   };
 
@@ -284,6 +306,7 @@ export function FNFManagement() {
       "Completed": "bg-green-50 text-green-700 border-green-200",
       "Open": "bg-blue-50 text-blue-700 border-blue-200",
       "Revision Required": "bg-red-50 text-red-700 border-red-200",
+      "F&F Paid": "bg-amber-50 text-amber-700 border-amber-200",
     };
     return (
       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-[4px] text-xs font-medium border ${colorMap[label] || ""}`}>
@@ -313,6 +336,7 @@ export function FNFManagement() {
     { type: "closed" as const, label: "F&F Closed", value: fnfStats.closed, icon: CheckCircle, color: "text-teal-600" },
     { type: "open" as const, label: "F&F Open", value: fnfStats.open, icon: Clock, color: "text-blue-600" },
     { type: "revision" as const, label: "Revision Required", value: fnfStats.revision, icon: XCircle, color: "text-red-600" },
+    { type: "fnfPaid" as const, label: "F&F Paid (Not in DMS)", value: fnfStats.paid, icon: IndianRupee, color: "text-amber-600" },
     { type: "fnfDelayed" as const, label: "F&F Delayed Cases", value: fnfDelayedData.length, icon: AlertCircle, color: "text-orange-600" },
     { type: "avgTAT" as const, label: "F&F TAT w.r.t NDC Closure Date (In Days)", value: fnfStats.avgTAT, icon: TrendingUp, color: "text-purple-600" },
     { type: "avgTATLWD" as const, label: "F&F TAT w.r.t Last Working Date (In Days)", value: fnfStats.avgTATLWD, icon: TrendingUp, color: "text-indigo-600" },
@@ -351,16 +375,18 @@ export function FNFManagement() {
       {/* KPI Cards */}
       <div id="section-fnf-kpis" className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
         {kpiCards.map(({ type, label, value, icon: Icon, color }) => {
-          const isInteractive = type !== "avgTAT" && type !== "fnfDelayed";
+          const isInteractive = type !== "avgTAT" && type !== "avgTATLWD" && type !== "fnfDelayed" && type !== "fnfPaid";
           const handleClick = type === "fnfDelayed"
             ? () => { setFnfDelayedTableOpen(true); setFnfDelayedCurrentPage(1); }
+            : type === "fnfPaid"
+            ? () => { setFnfPaidTableOpen(true); setFnfPaidCurrentPage(1); }
             : isInteractive ? () => handleKPIClick(type) : undefined;
           return (
             <div
               key={type}
               onClick={handleClick}
-              className={`bg-card rounded-[4px] p-5 border border-border h-[110px] flex flex-col justify-between ${type !== "avgTAT" ? "cursor-pointer hover:scale-105 transition-transform duration-200" : ""
-                }`}
+              className={`bg-card rounded-[4px] p-5 border border-border h-[110px] flex flex-col justify-between ${type !== "avgTAT" && type !== "avgTATLWD" ? "cursor-pointer hover:scale-105 transition-transform duration-200" : ""}
+                ${type === "fnfPaid" && fnfStats.paid > 0 ? "border-amber-300 bg-amber-50/30" : ""}`}
             >
               <div className="flex items-start justify-between gap-2">
                 <span className="text-sm text-muted-foreground leading-tight">{label}</span>
@@ -391,6 +417,7 @@ export function FNFManagement() {
               <option value="Done">Completed</option>
               <option value="Open">Open</option>
               <option value="Revision Required">Revision Required</option>
+              <option value="FnfPaid">F&F Paid (Not in DMS)</option>
             </select>
           </div>
           <div>
@@ -499,6 +526,16 @@ export function FNFManagement() {
                       >
                         <CheckSquare className="w-4 h-4" />
                       </button>
+                      {/* Mark as F&F Paid — only show for Open records (not completed/closed/revision/paid) */}
+                      {!record.isFnfCompleted && !record.isFnfClosed && !record.isFnfRevision && !getProp(record, "isFnfPaid", "is_fnf_paid") && (
+                        <button
+                          onClick={() => setPaidConfirmRecord(record)}
+                          className="p-2 rounded-[4px] transition-colors bg-amber-50 text-amber-600 hover:bg-amber-100"
+                          title="Mark as F&F Paid (Not in DMS)"
+                        >
+                          <IndianRupee className="w-4 h-4" />
+                        </button>
+                      )}
                       <button
                         onClick={() => { setMailRecord(record); setMailEmailTo(""); setMailDialogOpen(true); }}
                         disabled={record.fnfDocumentCount === 0}
@@ -711,7 +748,7 @@ export function FNFManagement() {
       <Dialog open={actionDialogOpen} onOpenChange={(open) => { setActionDialogOpen(open); if (!open) { setShowRevisionComment(false); setRevisionComment(""); } }}>
         <DialogContent className="max-w-md p-6">
           <DialogHeader>
-            <DialogTitle className="text-xl font-semibold text-foreground">{showRevisionComment ? "Revision Comment" : "F&amp;F document confirmation"}</DialogTitle>
+            <DialogTitle className="text-xl font-semibold text-foreground">{showRevisionComment ? "Revision Comment" : "F&F document confirmation"}</DialogTitle>
           </DialogHeader>
           {selectedRecord && (
             <div className="space-y-6 pt-4">
@@ -1039,6 +1076,178 @@ export function FNFManagement() {
                   <button onClick={() => setFnfDelayedCurrentPage(Math.max(1, fnfDelayedCurrentPage - 1))} disabled={fnfDelayedCurrentPage === 1} className="p-2 rounded-[4px] border border-border hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"><ChevronLeft className="w-4 h-4" /></button>
                   <span className="text-sm text-foreground">Page {fnfDelayedCurrentPage} of {fnfDelayedTotalPages}</span>
                   <button onClick={() => setFnfDelayedCurrentPage(Math.min(fnfDelayedTotalPages, fnfDelayedCurrentPage + 1))} disabled={fnfDelayedCurrentPage === fnfDelayedTotalPages} className="p-2 rounded-[4px] border border-border hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"><ChevronRight className="w-4 h-4" /></button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </FullScreenModal>
+
+      {/* ── F&F Paid Confirm Dialog ─────────────────────────────────────────── */}
+      <Dialog open={!!paidConfirmRecord} onOpenChange={(open) => { if (!open) setPaidConfirmRecord(null); }}>
+        <DialogContent className="max-w-md p-6">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-semibold text-foreground flex items-center gap-2">
+              <IndianRupee className="w-5 h-5 text-amber-600" />
+              Mark as F&amp;F Paid
+            </DialogTitle>
+          </DialogHeader>
+          {paidConfirmRecord && (
+            <div className="space-y-6 pt-4">
+              <div className="bg-amber-50 border border-amber-200 p-4 rounded-[6px] space-y-1.5">
+                <p className="text-sm text-slate-700">
+                  Employee: <span className="font-semibold text-slate-900">{paidConfirmRecord.employeeName}</span>
+                </p>
+                <p className="text-sm text-slate-500">
+                  Person Number: <span className="text-slate-700">{paidConfirmRecord.personNumber}</span>
+                </p>
+                <p className="text-sm text-slate-500">
+                  Department: <span className="text-slate-700">{paidConfirmRecord.department}</span>
+                </p>
+              </div>
+
+              <p className="text-sm text-slate-700 leading-relaxed">
+                Are you sure you want to mark this employee as <span className="font-semibold text-amber-700">F&amp;F Paid (Not in DMS)</span>?
+                This means finance has released the settlement payment but the DMS document upload is still pending.
+              </p>
+
+              <div className="flex gap-3">
+                <button
+                  disabled={markingPaid}
+                  onClick={() => {
+                    if (!paidConfirmRecord) return;
+                    setMarkingPaid(true);
+                    axios.put(`/api/v1/ndc-records/${paidConfirmRecord.id}`, { is_fnf_paid: true })
+                      .then(() => {
+                        fetchData();
+                        toast.success(`F&F Paid marked for ${paidConfirmRecord.employeeName} (${paidConfirmRecord.personNumber})`);
+                        setPaidConfirmRecord(null);
+                      })
+                      .catch((err) => {
+                        const errMsg = err.response?.data?.detail || err.message || "Failed to update";
+                        toast.error(errMsg);
+                      })
+                      .finally(() => setMarkingPaid(false));
+                  }}
+                  className="flex-1 px-4 py-3 bg-amber-600 text-white rounded-[6px] hover:bg-amber-700 transition-colors flex items-center justify-center gap-2 font-semibold text-sm shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <IndianRupee className="w-4 h-4 shrink-0" />
+                  {markingPaid ? "Updating..." : "Confirm — Mark as Paid"}
+                </button>
+                <button
+                  onClick={() => setPaidConfirmRecord(null)}
+                  className="px-4 py-3 border border-slate-300 text-slate-700 rounded-[6px] hover:bg-slate-50 transition-colors text-sm font-medium"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── F&F Paid (Not in DMS) Full-Screen Modal ────────────────────────── */}
+      <FullScreenModal
+        open={fnfPaidTableOpen}
+        onClose={() => setFnfPaidTableOpen(false)}
+        title="F&F Paid (Not in DMS)"
+        headerActions={
+          <div className="flex items-center gap-3">
+            <button
+              disabled={fnfPaidData.length === 0}
+              onClick={() => {
+                setReminderMailEmailTo("");
+                setReminderMailType("fnf_paid");
+                setReminderMailDialogOpen(true);
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground text-sm rounded-[4px] hover:bg-primary/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              <Mail className="w-4 h-4" />
+              Send Reminder
+            </button>
+            <button
+              disabled={fnfPaidData.length === 0}
+              onClick={() => {
+                const mappedData = fnfPaidData.map(r => ({
+                  "Person Number": r.personNumber,
+                  "Name": r.employeeName,
+                  "Department": r.department,
+                  "Last Working Date": formatDate(r.lastWorkingDate),
+                  "NDC Final Cleared Date": formatDate(r.ndcCompletedDate),
+                  "F&F Status": "F&F Paid (Not in DMS)",
+                }));
+                exportToExcel(mappedData, "FnF_Paid_Not_In_DMS");
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground text-sm rounded-[4px] hover:bg-primary/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              <Download className="w-4 h-4" />
+              Export to Excel
+            </button>
+          </div>
+        }
+      >
+        <div className="flex-1 overflow-auto p-6">
+          <div className="h-full flex flex-col">
+            <h3 className="text-base font-semibold text-amber-800 mb-3 shrink-0 flex items-center gap-2">
+              F&amp;F Paid — DMS Upload Pending
+              <span className="ml-2 text-sm font-normal text-muted-foreground">({fnfPaidData.length} records)</span>
+            </h3>
+            <div className="overflow-x-auto rounded-[4px] border border-amber-200 flex-1">
+              <table className="w-full text-sm">
+                <thead className="bg-amber-50 sticky top-0 z-10">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">Person Number</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">Name</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">Department</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">Last Working Date</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">NDC Final Cleared Date</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">F&amp;F Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-amber-100 bg-card">
+                  {fnfPaidData.length === 0 ? (
+                    <tr><td colSpan={6} className="px-4 py-6 text-center text-muted-foreground">No F&F Paid records found</td></tr>
+                  ) : fnfPaidPaginated.map((record) => (
+                    <tr key={record.id} className="hover:bg-amber-50/50">
+                      <td className="px-4 py-3 whitespace-nowrap font-medium">{record.personNumber}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">{record.employeeName}</td>
+                      <td className="px-4 py-3">{record.department}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">{formatDate(record.lastWorkingDate)}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">{formatDate(record.ndcCompletedDate)}</td>
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-[4px] text-xs font-medium bg-amber-100 text-amber-700 border border-amber-200 whitespace-nowrap">
+                          F&amp;F Paid
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {fnfPaidData.length > 0 && (
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-4 shrink-0">
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="text-sm text-muted-foreground">
+                    Showing {fnfPaidStartIndex + 1} to {Math.min(fnfPaidStartIndex + fnfPaidItemsPerPage, fnfPaidData.length)} of {fnfPaidData.length} records
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <span>Rows per page:</span>
+                    <select
+                      value={fnfPaidItemsPerPage}
+                      onChange={(e) => { setFnfPaidItemsPerPage(Number(e.target.value)); setFnfPaidCurrentPage(1); }}
+                      className="h-8 px-2 rounded-[4px] border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                    >
+                      <option value={20}>20</option>
+                      <option value={30}>30</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setFnfPaidCurrentPage(Math.max(1, fnfPaidCurrentPage - 1))} disabled={fnfPaidCurrentPage === 1} className="p-2 rounded-[4px] border border-border hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"><ChevronLeft className="w-4 h-4" /></button>
+                  <span className="text-sm text-foreground">Page {fnfPaidCurrentPage} of {fnfPaidTotalPages}</span>
+                  <button onClick={() => setFnfPaidCurrentPage(Math.min(fnfPaidTotalPages, fnfPaidCurrentPage + 1))} disabled={fnfPaidCurrentPage === fnfPaidTotalPages} className="p-2 rounded-[4px] border border-border hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"><ChevronRight className="w-4 h-4" /></button>
                 </div>
               </div>
             )}

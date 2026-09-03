@@ -115,12 +115,13 @@ class EmailRecipientService:
 
             # Fetch records based on type
             if payload_type == "fnf_open":
-                # NDC Completed, but F&F is not completed and not revision
+                # NDC Completed, F&F not completed, not revision, and NOT already paid
                 result = await db.execute(
                     select(NdcRecord).where(
                         NdcRecord.ndc_stage == "NDC Completed",
                         NdcRecord.is_fnf_completed == False,
                         NdcRecord.is_fnf_revision == False,
+                        NdcRecord.is_fnf_paid == False,
                     )
                 )
                 records = result.scalars().all()
@@ -135,6 +136,21 @@ class EmailRecipientService:
                     select(NdcRecord).where(
                         NdcRecord.ndc_stage == "NDC Completed",
                         NdcRecord.is_fnf_revision == True,
+                    )
+                )
+                records = result.scalars().all()
+                sorted_records = sorted(
+                    records,
+                    key=lambda r: r.last_working_date or date.min,
+                    reverse=True,
+                )
+            elif payload_type == "fnf_paid":
+                # F&F Paid but DMS not yet uploaded — is_fnf_paid=True, neither completed nor closed
+                result = await db.execute(
+                    select(NdcRecord).where(
+                        NdcRecord.is_fnf_paid == True,
+                        NdcRecord.is_fnf_completed == False,
+                        NdcRecord.is_fnf_closed == False,
                     )
                 )
                 records = result.scalars().all()
