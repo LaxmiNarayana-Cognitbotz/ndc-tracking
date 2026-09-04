@@ -2,17 +2,17 @@ import logging
 from datetime import date
 from typing import List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import HTTPException
+from fastapi import BackgroundTasks, HTTPException
 
 from app.dto.common import CommonNDCRecord, FnfUpdateRequest
+from app.models.email_recipient import EmailRecipient
 from app.models.ndc_approval import NdcApproval
 from app.models.ndc_record import NdcRecord
 from config.database import BASE_DIR
 
 logger = logging.getLogger(__name__)
-
 
 
 class CommonService:
@@ -183,6 +183,67 @@ class CommonService:
             result.append(CommonNDCRecord(**item))
         return result
 
+    @staticmethod
+    async def _handle_fnf_revision_email(
+        record: NdcRecord,
+        body: FnfUpdateRequest,
+        db: AsyncSession,
+        background_tasks: Optional[BackgroundTasks] = None,
+    ):
+        """Send instant email to F&F Team when revision is marked with a comment."""
+        if not (body.is_fnf_revision and body.fnf_revision_comment):
+            return
+
+        try:
+            from app.modules.email.service import EmailService
+            result = await db.execute(
+                select(EmailRecipient).where(
+                    func.lower(func.trim(EmailRecipient.department)).in_(["f&f team", "fnf team", "f&f", "fnf"])
+                )
+            )
+            rows = result.scalars().all()
+            ff_recipients: list[str] = []
+            for r in rows:
+                if r.email:
+                    for addr in r.email.replace(";", ",").split(","):
+                        clean = addr.strip()
+                        if clean and clean not in ff_recipients:
+                            ff_recipients.append(clean)
+
+            # Fallback to environment variables if no DB recipient configured
+            if not ff_recipients:
+                import os
+                env_fallback = os.getenv("FNF_EMAIL_RECIPIENT") or os.getenv("EMAIL_RECIPIENT")
+                if env_fallback:
+                    for addr in env_fallback.replace(";", ",").split(","):
+                        clean = addr.strip()
+                        if clean and clean not in ff_recipients:
+                            ff_recipients.append(clean)
+
+            if ff_recipients:
+                if background_tasks:
+                    background_tasks.add_task(
+                        EmailService.send_fnf_revision_comment_email,
+                        record,
+                        body.fnf_revision_comment,
+                        ff_recipients,
+                    )
+                else:
+                    EmailService.send_fnf_revision_comment_email(
+                        record,
+                        body.fnf_revision_comment,
+                        ff_recipients,
+                    )
+
+                record.is_fnf_revision_email_sent = True
+                await db.commit()
+            else:
+                logger.warning(
+                    f"F&F Team email recipient is not configured (checked 'email_recipients' table and EMAIL_RECIPIENT env). "
+                    f"Skipping revision comment email for record ID {record.id} ({getattr(record, 'person_number', 'N/A')})."
+                )
+        except Exception as email_err:
+            logger.warning(f"Could not queue F&F revision comment email: {email_err}")
 
     @staticmethod
     def _derive_fnf_status(record: NdcRecord) -> str:
@@ -206,7 +267,10 @@ class CommonService:
 
     @staticmethod
     async def update_fnf_status(
-        record_id: int, body: FnfUpdateRequest, db: AsyncSession
+        record_id: int, 
+        body: FnfUpdateRequest, 
+        db: AsyncSession,
+        background_tasks: Optional[BackgroundTasks] = None,
     ) -> Optional[NdcRecord]:
         """Update F&F flags on a record and optionally propagate dates."""
         try:
@@ -282,6 +346,10 @@ class CommonService:
                 record.fnf_document_count = body.fnf_document_count
 
             await db.commit()
+            
+            # Trigger F&F revision email notification via service layer helper
+            await CommonService._handle_fnf_revision_email(record, body, db, background_tasks)
+
             return record
         except Exception as e:
             logger.error(f"Error in update_fnf_status: {e}", exc_info=True)

@@ -23,6 +23,7 @@ from app.models.ndc_approval import NdcApproval
 from app.models.ndc_record import NdcRecord
 from app.models.rm_email_configuration import RmEmailConfiguration
 from app.modules.common.service import CommonService
+from app.helpers.email.template_renderer import render_template
 from app.utils.pdf_utils import trim_pdf_to_max_pages
 from config.database import BASE_DIR, async_session
 
@@ -111,20 +112,20 @@ class EmailService:
             for rec in records:
                 days = rec.get("days_delayed", 0)
                 if reminder_type == "fnf_open":
-                    status_td = '<td style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;"><span style="color:#0b3d91;font-weight:600;">Open</span></td>'
+                    status_td = '<td style="padding:10px 14px;font-family:\'Adani\',\'Rubik\',Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;"><span style="color:#003b70;font-weight:600;">Open</span></td>'
                 elif reminder_type == "fnf_revision":
-                    status_td = '<td style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;"><span style="background-color:#ffe5e5;color:#d62828;padding:4px 10px;border-radius:12px;font-weight:600;display:inline-block;">Revision Required</span></td>'
+                    status_td = '<td style="padding:10px 14px;font-family:\'Adani\',\'Rubik\',Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;"><span style="background-color:#ffe5e5;color:#d62828;padding:4px 10px;border-radius:12px;font-weight:600;display:inline-block;">Revision Required</span></td>'
                 elif reminder_type == "fnf_paid":
-                    status_td = '<td style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;"><span style="background-color:#fef3c7;color:#b45309;padding:4px 10px;border-radius:12px;font-weight:600;display:inline-block;">F&amp;F Paid (DMS Pending)</span></td>'
+                    status_td = '<td style="padding:10px 14px;font-family:\'Adani\',\'Rubik\',Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;"><span style="background-color:#fef3c7;color:#b45309;padding:4px 10px;border-radius:12px;font-weight:600;display:inline-block;">F&amp;F Paid (DMS Pending)</span></td>'
                 else:
-                    status_td = f'<td style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;"><span style="background-color:#ffe5e5;color:#d62828;padding:4px 10px;border-radius:12px;font-weight:600;display:inline-block;">{days} Days</span></td>'
+                    status_td = f'<td style="padding:10px 14px;font-family:\'Adani\',\'Rubik\',Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;"><span style="background-color:#ffe5e5;color:#d62828;padding:4px 10px;border-radius:12px;font-weight:600;display:inline-block;">{days} Days</span></td>'
 
                 row_html += f"""
                 <tr>
-                  <td style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;">{rec.get('person_number', '')}</td>
-                  <td style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;">{rec.get('employee_name', '')}</td>
-                  <td style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;">{rec.get('department', '—')}</td>
-                  <td style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;">{EmailService._fmt_date(rec.get('last_working_date'))}</td>
+                  <td style="padding:10px 14px;font-family:'Adani','Rubik',Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;">{rec.get('person_number', '')}</td>
+                  <td style="padding:10px 14px;font-family:'Adani','Rubik',Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;">{rec.get('employee_name', '')}</td>
+                  <td style="padding:10px 14px;font-family:'Adani','Rubik',Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;">{rec.get('department', '—')}</td>
+                  <td style="padding:10px 14px;font-family:'Adani','Rubik',Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;">{EmailService._fmt_date(rec.get('last_working_date'))}</td>
                   {status_td}
                 </tr>"""
 
@@ -154,78 +155,13 @@ class EmailService:
                 col_5 = "Days Delayed"
                 outro = "Kindly review and expedite the pending actions to ensure timely closure."
 
-            html = f"""<!DOCTYPE html>
-        <html>
-        <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <meta name="x-apple-disable-message-reformatting">
-        <style>
-          body {{ margin: 0; padding: 0; background-color: #f5f7fb; font-family: Arial, sans-serif; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }}
-          table {{ border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; }}
-          .wrapper {{ width: 100% !important; background-color: #f5f7fb; padding: 20px 10px; }}
-          .container {{ width: 100% !important; max-width: 800px !important; margin: 0 auto; background-color: #ffffff; border-radius: 10px; border: 1px solid #e5e7eb; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,.08); }}
-          .table-responsive {{ width: 100% !important; overflow-x: auto !important; -webkit-overflow-scrolling: touch; margin-top: 15px; }}
-          @media only screen and (max-width: 600px) {{
-            .wrapper {{ padding: 10px 4px !important; }}
-            .header {{ padding: 18px 16px !important; }}
-            .header h2 {{ font-size: 18px !important; line-height: 1.3 !important; }}
-            .content {{ padding: 16px 12px !important; font-size: 13px !important; }}
-            .footer {{ padding: 16px 12px !important; font-size: 11.5px !important; }}
-            th, td {{ padding: 8px 6px !important; font-size: 12px !important; }}
-          }}
-        </style>
-        </head>
-        <body style="background-color:#f5f7fb;font-family:Arial,sans-serif;margin:0;padding:0;">
-        <table width="100%" border="0" cellspacing="0" cellpadding="0" bgcolor="#f5f7fb" class="wrapper" style="background-color:#f5f7fb;width:100%;padding:20px 10px;">
-          <tr>
-            <td align="center">
-              <table class="container" width="100%" border="0" cellspacing="0" cellpadding="0" style="width:100%;max-width:800px;margin:0 auto;background-color:#ffffff;border-radius:10px;border:1px solid #e5e7eb;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08);border-collapse:separate;">
-                <tr>
-                  <td class="header" bgcolor="#0b3d91" style="background-color:#0b3d91;padding:25px 35px;color:white;">
-                    <h2 style="margin:0;font-family:Arial,sans-serif;font-size:22px;color:#ffffff;font-weight:bold;">{title}</h2>
-                  </td>
-                </tr>
-                <tr>
-                  <td class="content" style="padding:30px;color:#333333;font-family:Arial,sans-serif;font-size:14px;line-height:1.7;">
-                    <p style="margin:0 0 16px 0;">Hello Team,</p>
-                    <p style="margin:0 0 16px 0;">
-                      {intro}
-                    </p>
-                    <div class="table-responsive" style="width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:15px;">
-                      <table width="100%" border="0" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;min-width:480px;">
-                        <thead>
-                          <tr bgcolor="#eef3fb" style="background-color:#eef3fb;">
-                            <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:1px solid #ececec;">Employee ID</th>
-                            <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:1px solid #ececec;">Name</th>
-                            <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:1px solid #ececec;">Department</th>
-                            <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:1px solid #ececec;">Pending Since</th>
-                            <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:1px solid #ececec;">{col_5}</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {row_html}
-                        </tbody>
-                      </table>
-                    </div>
-                    <p style="margin:20px 0 0 0;font-family:Arial,sans-serif;font-size:14px;line-height:1.6;color:#333333;">
-                      {outro}
-                    </p>
-                  </td>
-                </tr>
-                <tr>
-                  <td class="footer" bgcolor="#fafafa" style="padding:25px 30px;background-color:#fafafa;color:#666666;border-top:1px solid #ececec;font-family:Arial,sans-serif;font-size:12.5px;line-height:1.5;">
-                    Regards,<br>
-                    <b style="color:#333333;">Team HR</b>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-        </table>
-        </body>
-        </html>"""
-            return html
+            return render_template("delayed_reminder", {
+                "title": title,
+                "intro": intro,
+                "col_5": col_5,
+                "outro": outro,
+                "row_html": row_html,
+            })
         except HTTPException:
             raise
         except Exception as e:
@@ -306,8 +242,12 @@ class EmailService:
             if reminder_type in ("fnf_open", "fnf_revision", "fnf_delayed", "fnf_paid"):
                 cc_recipient = os.getenv("FNF_EMAIL_CC") or os.getenv("EMAIL_CC", "")
                 if cc_recipient:
-                    msg["Cc"] = cc_recipient
-                    envelope_recipients.append(cc_recipient)
+                    cc_list = EmailService._parse_recipients(cc_recipient)
+                    if cc_list:
+                        msg["Cc"] = ", ".join(cc_list)
+                        for c in cc_list:
+                            if c not in envelope_recipients:
+                                envelope_recipients.append(c)
 
             msg.attach(MIMEText(html_body, "html"))
 
@@ -362,92 +302,16 @@ class EmailService:
                 return {"success": False, "message": msg}
 
             # Build simple, professional HTML template
-            html_body = f"""<!DOCTYPE html>
-        <html>
-        <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <meta name="x-apple-disable-message-reformatting">
-        <style>
-          body {{ margin: 0; padding: 0; background-color: #f8fafc; font-family: Arial, sans-serif; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }}
-          table {{ border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; }}
-          .wrapper {{ width: 100% !important; background-color: #f8fafc; padding: 20px 10px; }}
-          .container {{ width: 100% !important; max-width: 560px !important; margin: 0 auto; background-color: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0; border-top: 4px solid #0f766e; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }}
-          .table-responsive {{ width: 100% !important; overflow-x: auto !important; -webkit-overflow-scrolling: touch; margin: 20px 0; }}
-          @media only screen and (max-width: 600px) {{
-            .wrapper {{ padding: 10px 4px !important; }}
-            .content {{ padding: 20px 14px !important; font-size: 13px !important; }}
-            .footer {{ padding: 16px 14px !important; font-size: 11.5px !important; }}
-            .details-table td {{ padding: 8px 6px !important; font-size: 12px !important; }}
-          }}
-        </style>
-        </head>
-        <body style="background-color:#f8fafc;font-family:Arial,sans-serif;margin:0;padding:0;">
-        <table width="100%" border="0" cellspacing="0" cellpadding="0" bgcolor="#f8fafc" class="wrapper" style="background-color:#f8fafc;width:100%;padding:20px 10px;">
-          <tr>
-            <td align="center">
-              <table class="container" width="100%" border="0" cellspacing="0" cellpadding="0" style="width:100%;max-width:560px;margin:0 auto;background-color:#ffffff;border-radius:8px;border:1px solid #e2e8f0;border-top:4px solid #0f766e;overflow:hidden;box-shadow:0 4px 6px -1px rgba(0, 0, 0, 0.05);border-collapse:separate;">
-                <tr>
-                  <td class="content" style="padding:32px 24px;color:#334155;font-family:Arial,sans-serif;font-size:14px;line-height:1.6;">
-                    <h2 style="color:#0f766e;font-size:18px;font-weight:600;margin-top:0;margin-bottom:20px;border-bottom:1px solid #e2e8f0;padding-bottom:10px;font-family:Arial,sans-serif;">Full &amp; Final Settlement Details</h2>
-                    <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#475569;font-family:Arial,sans-serif;">Dear {record.get('employee_name') or 'Team'},</p>
-                    <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#475569;font-family:Arial,sans-serif;">Please find attached your Full &amp; Final Settlement documents for your reference.</p>
-                
-                    <div class="table-responsive" style="width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;margin:20px 0;">
-                      <table class="details-table" width="100%" border="0" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;">
-                        <tr>
-                          <td class="label" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;font-weight:600;color:#64748b;width:38%;font-family:Arial,sans-serif;font-size:13.5px;">Employee Name:</td>
-                          <td class="value" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;color:#0f172a;font-weight:500;font-family:Arial,sans-serif;font-size:13.5px;">{record.get('employee_name')}</td>
-                        </tr>
-                        <tr>
-                          <td class="label" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;font-weight:600;color:#64748b;width:38%;font-family:Arial,sans-serif;font-size:13.5px;">Person Number:</td>
-                          <td class="value" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;color:#0f172a;font-weight:500;font-family:Arial,sans-serif;font-size:13.5px;">{record.get('person_number')}</td>
-                        </tr>
-                        <tr>
-                          <td class="label" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;font-weight:600;color:#64748b;width:38%;font-family:Arial,sans-serif;font-size:13.5px;">Department:</td>
-                          <td class="value" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;color:#0f172a;font-weight:500;font-family:Arial,sans-serif;font-size:13.5px;">{record.get('department')}</td>
-                        </tr>
-                        <tr>
-                          <td class="label" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;font-weight:600;color:#64748b;width:38%;font-family:Arial,sans-serif;font-size:13.5px;">Resignation Date:</td>
-                          <td class="value" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;color:#0f172a;font-weight:500;font-family:Arial,sans-serif;font-size:13.5px;">{EmailService._fmt_date(record.get('resignation_date'))}</td>
-                        </tr>
-                        <tr>
-                          <td class="label" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;font-weight:600;color:#64748b;width:38%;font-family:Arial,sans-serif;font-size:13.5px;">Last Working Date:</td>
-                          <td class="value" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;color:#0f172a;font-weight:500;font-family:Arial,sans-serif;font-size:13.5px;">{EmailService._fmt_date(record.get('last_working_date'))}</td>
-                        </tr>
-                        <tr>
-                          <td class="label" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;font-weight:600;color:#64748b;width:38%;font-family:Arial,sans-serif;font-size:13.5px;">F&amp;F Status:</td>
-                          <td class="value" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;color:#0f172a;font-weight:500;font-family:Arial,sans-serif;font-size:13.5px;">{record.get('fnf_status')}</td>
-                        </tr>
-                        <tr>
-                          <td class="label" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;font-weight:600;color:#64748b;width:38%;font-family:Arial,sans-serif;font-size:13.5px;">Completed Date:</td>
-                          <td class="value" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;color:#0f172a;font-weight:500;font-family:Arial,sans-serif;font-size:13.5px;">{EmailService._fmt_date(record.get('fnf_completed_date'))}</td>
-                        </tr>
-                        <tr>
-                          <td class="label" style="padding:10px 12px;border-bottom:none;font-weight:600;color:#64748b;width:38%;font-family:Arial,sans-serif;font-size:13.5px;">Document Count:</td>
-                          <td class="value" style="padding:10px 12px;border-bottom:none;color:#0f172a;font-weight:500;font-family:Arial,sans-serif;font-size:13.5px;">ACTUAL_DOCUMENT_COUNT_PLACEHOLDER</td>
-                        </tr>
-                      </table>
-                    </div>
-                
-                    <p style="margin:20px 0 0;font-size:14px;line-height:1.6;color:#475569;font-family:Arial,sans-serif;">
-                      Kindly review the details and inform us if you notice any discrepancy or have any queries.<br>
-                      Wishing you success in your future endeavors.
-                    </p>
-                  </td>
-                </tr>
-                <tr>
-                  <td class="footer" bgcolor="#f8fafc" style="background-color:#f8fafc;padding:20px 24px;border-top:1px solid #e2e8f0;font-family:Arial,sans-serif;font-size:12.5px;color:#64748b;line-height:1.5;">
-                    Regards,<br>
-                    <strong style="color:#475569;">Team HR</strong>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-        </table>
-        </body>
-        </html>"""
+            html_body = render_template("fnf_settlement", {
+                "employee_name": record.get('employee_name') or 'Team',
+                "person_number": record.get('person_number') or '—',
+                "department": record.get('department') or '—',
+                "resignation_date": EmailService._fmt_date(record.get('resignation_date')),
+                "last_working_date": EmailService._fmt_date(record.get('last_working_date')),
+                "fnf_status": record.get('fnf_status') or '—',
+                "fnf_completed_date": EmailService._fmt_date(record.get('fnf_completed_date')),
+                "document_count": "ACTUAL_DOCUMENT_COUNT_PLACEHOLDER",
+            })
 
             # Build MIMEMultipart message
             msg = MIMEMultipart("mixed")
@@ -457,13 +321,15 @@ class EmailService:
         
             # CC recipient for F&F emails (manual and automated)
             cc_recipient = os.getenv("FNF_EMAIL_CC") or os.getenv("EMAIL_CC", "")
-            if cc_recipient:
-                msg["Cc"] = cc_recipient
+            cc_list = EmailService._parse_recipients(cc_recipient) if cc_recipient else []
+            if cc_list:
+                msg["Cc"] = ", ".join(cc_list)
 
             # Build list of envelope recipients for SMTP sendmail
-            recipients = [email_to]
-            if cc_recipient:
-                recipients.append(cc_recipient)
+            recipients = EmailService._parse_recipients(email_to)
+            for c in cc_list:
+                if c not in recipients:
+                    recipients.append(c)
         
             # Attach F&F document(s) from SharePoint or local folder as fallback
             attached_from_sharepoint = False
@@ -729,63 +595,14 @@ class EmailService:
 
             subject = f"F&F Revision Required – {record.employee_name} ({record.person_number})"
 
-            html_body = f"""<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-</head>
-<body style="background-color:#f5f7fb;font-family:Arial,sans-serif;margin:0;padding:0;">
-<table width="100%" border="0" cellspacing="0" cellpadding="0" bgcolor="#f5f7fb" style="background-color:#f5f7fb;width:100%;padding:20px 10px;">
-  <tr>
-    <td align="center">
-      <table width="100%" border="0" cellspacing="0" cellpadding="0" style="width:100%;max-width:700px;margin:0 auto;background-color:#ffffff;border-radius:10px;border:1px solid #e5e7eb;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08);border-collapse:separate;">
-        <tr>
-          <td bgcolor="#0b3d91" style="background-color:#0b3d91;color:white;padding:25px 35px;">
-            <h2 style="margin:0;font-family:Arial,sans-serif;font-size:22px;color:#ffffff;font-weight:bold;">F&amp;F Revision Required – Action Needed</h2>
-          </td>
-        </tr>
-        <tr>
-          <td style="padding:30px;color:#333333;font-family:Arial,sans-serif;font-size:14px;line-height:1.7;">
-            <p style="margin:0 0 16px 0;">Dear Team,</p>
-            <p style="margin:0 0 16px 0;">The following F&amp;F record has been marked as <b>Revision Required</b> on {today_str}:</p>
-            <table width="100%" border="0" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;margin-bottom:20px;">
-              <thead>
-                <tr bgcolor="#eef3fb" style="background-color:#eef3fb;">
-                  <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:1px solid #ececec;">Employee ID</th>
-                  <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:1px solid #ececec;">Name</th>
-                  <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:1px solid #ececec;">Department</th>
-                  <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:1px solid #ececec;">Last Working Date</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;">{record.person_number}</td>
-                  <td style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;">{record.employee_name}</td>
-                  <td style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;">{record.department or '—'}</td>
-                  <td style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;">{lwd}</td>
-                </tr>
-              </tbody>
-            </table>
-            <div style="background-color:#fffbeb;border-left:4px solid #f59e0b;padding:16px 20px;border-radius:0 6px 6px 0;margin-bottom:20px;">
-              <p style="margin:0 0 8px 0;font-family:Arial,sans-serif;font-size:14px;font-weight:bold;color:#92400e;">Revision Comment</p>
-              <p style="margin:0;font-family:Arial,sans-serif;font-size:13.5px;color:#78350f;line-height:1.6;font-style:italic;">"{escaped_comment}"</p>
-            </div>
-            <p style="margin:0;font-family:Arial,sans-serif;font-size:14px;line-height:1.6;color:#333333;">Kindly review and take the necessary actions at the earliest.</p>
-          </td>
-        </tr>
-        <tr>
-          <td bgcolor="#fafafa" style="padding:25px 30px;background-color:#fafafa;color:#666666;border-top:1px solid #ececec;font-family:Arial,sans-serif;font-size:12.5px;line-height:1.5;">
-            Regards,<br>
-            <b style="color:#333333;">Team HR</b>
-          </td>
-        </tr>
-      </table>
-    </td>
-  </tr>
-</table>
-</body>
-</html>"""
+            html_body = render_template("fnf_revision", {
+                "person_number": record.person_number,
+                "employee_name": record.employee_name,
+                "department": record.department or '—',
+                "lwd": lwd,
+                "today_str": today_str,
+                "escaped_comment": escaped_comment,
+            })
 
             msg = MIMEMultipart("alternative")
             msg["Subject"] = subject
@@ -796,8 +613,12 @@ class EmailService:
             envelope_recipients = list(recipients_list)
             cc_recipient = os.getenv("FNF_EMAIL_CC") or os.getenv("EMAIL_CC", "")
             if cc_recipient:
-                msg["Cc"] = cc_recipient
-                envelope_recipients.append(cc_recipient)
+                cc_list = EmailService._parse_recipients(cc_recipient)
+                if cc_list:
+                    msg["Cc"] = ", ".join(cc_list)
+                    for c in cc_list:
+                        if c not in envelope_recipients:
+                            envelope_recipients.append(c)
 
             msg.attach(MIMEText(html_body, "html"))
 
@@ -847,10 +668,10 @@ class EmailService:
                 lwd = EmailService._fmt_date(rec.last_working_date)
                 row_html += f"""
                 <tr>
-                  <td style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;">{rec.person_number}</td>
-                  <td style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;">{rec.employee_name}</td>
-                  <td style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;">{rec.department or '—'}</td>
-                  <td style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;">{lwd}</td>
+                  <td style="padding:10px 14px;font-family:'Adani','Rubik',Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;">{rec.person_number}</td>
+                  <td style="padding:10px 14px;font-family:'Adani','Rubik',Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;">{rec.employee_name}</td>
+                  <td style="padding:10px 14px;font-family:'Adani','Rubik',Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;">{rec.department or '—'}</td>
+                  <td style="padding:10px 14px;font-family:'Adani','Rubik',Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;">{lwd}</td>
                 </tr>"""
 
             greeting = f"Dear {manager_name}," if manager_name and "Conflict Redirected" not in manager_name else "Dear Team,"
@@ -893,74 +714,14 @@ class EmailService:
                     header_title = f"Pending {clean_dept} Approval Records"
                     outro = "Kindly review the above records and complete the necessary approvals at the earliest to avoid delays in the NDC process."
 
-            html_body = f"""<!DOCTYPE html>
-        <html>
-        <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <meta name="x-apple-disable-message-reformatting">
-        <style>
-          body {{ margin: 0; padding: 0; background-color: #f5f7fb; font-family: Arial, sans-serif; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }}
-          table {{ border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; }}
-          .wrapper {{ width: 100% !important; background-color: #f5f7fb; padding: 20px 10px; }}
-          .container {{ width: 100% !important; max-width: 800px !important; margin: 0 auto; background-color: #ffffff; border-radius: 10px; border: 1px solid #e5e7eb; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,.08); }}
-          .table-responsive {{ width: 100% !important; overflow-x: auto !important; -webkit-overflow-scrolling: touch; margin-top: 15px; }}
-          @media only screen and (max-width: 600px) {{
-            .wrapper {{ padding: 10px 4px !important; }}
-            .header {{ padding: 18px 16px !important; }}
-            .header h2 {{ font-size: 18px !important; line-height: 1.3 !important; }}
-            .content {{ padding: 16px 12px !important; font-size: 13px !important; }}
-            th, td {{ padding: 8px 6px !important; font-size: 12px !important; }}
-          }}
-        </style>
-        </head>
-        <body style="background-color:#f5f7fb;font-family:Arial,sans-serif;margin:0;padding:0;">
-        <table width="100%" border="0" cellspacing="0" cellpadding="0" bgcolor="#f5f7fb" class="wrapper" style="background-color:#f5f7fb;width:100%;padding:20px 10px;">
-          <tr>
-            <td align="center">
-              <table class="container" width="100%" border="0" cellspacing="0" cellpadding="0" style="width:100%;max-width:800px;margin:0 auto;background-color:#ffffff;border-radius:10px;border:1px solid #e5e7eb;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08);border-collapse:separate;">
-                <tr>
-                  <td class="header" bgcolor="#0b3d91" style="background-color:#0b3d91;color:white;padding:25px 35px;">
-                    <h2 style="margin:0;font-family:Arial,sans-serif;font-size:22px;color:#ffffff;font-weight:bold;">{header_title}</h2>
-                  </td>
-                </tr>
-                <tr>
-                  <td class="content" style="padding:30px;color:#333333;font-family:Arial,sans-serif;font-size:14px;line-height:1.7;">
-                    <p style="margin:0 0 16px 0;">{greeting}</p>
-                    {warning_html}
-                    {intro_paragraph}
-                    <div class="table-responsive" style="width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:15px;">
-                      <table width="100%" border="0" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;min-width:420px;">
-                        <thead>
-                          <tr bgcolor="#eef3fb" style="background-color:#eef3fb;">
-                            <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:1px solid #ececec;">Employee ID</th>
-                            <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:1px solid #ececec;">Name</th>
-                            <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:1px solid #ececec;">Department</th>
-                            <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:1px solid #ececec;">Last Working Date</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {row_html}
-                        </tbody>
-                      </table>
-                    </div>
-                    <p style="margin:20px 0 0 0;font-family:Arial,sans-serif;font-size:14px;line-height:1.6;color:#333333;">
-                      {outro}
-                    </p>
-                  </td>
-                </tr>
-                <tr>
-                  <td class="footer" bgcolor="#fafafa" style="padding:25px 30px;background-color:#fafafa;color:#666666;border-top:1px solid #ececec;font-family:Arial,sans-serif;font-size:12.5px;line-height:1.5;">
-                    Regards,<br>
-                    <b style="color:#333333;">Team HR</b>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-        </table>
-        </body>
-        </html>"""
+            html_body = render_template("department_notification", {
+                "header_title": header_title,
+                "greeting": greeting,
+                "warning_html": warning_html,
+                "intro_paragraph": intro_paragraph,
+                "row_html": row_html,
+                "outro": outro,
+            })
 
             recipients_list = EmailService._parse_recipients(recipient)
             if not recipients_list:
@@ -978,8 +739,12 @@ class EmailService:
             if clean_dept_lower in ("gcc hr", "f&f team", "f&f open", "f&f revision required", "f&f revision", "fnf team", "fnf"):
                 cc_recipient = os.getenv("FNF_EMAIL_CC") or os.getenv("EMAIL_CC", "")
                 if cc_recipient:
-                    msg["Cc"] = cc_recipient
-                    envelope_recipients.append(cc_recipient)
+                    cc_list = EmailService._parse_recipients(cc_recipient)
+                    if cc_list:
+                        msg["Cc"] = ", ".join(cc_list)
+                        for c in cc_list:
+                            if c not in envelope_recipients:
+                                envelope_recipients.append(c)
 
             msg.attach(MIMEText(html_body, "html"))
 
@@ -1032,81 +797,16 @@ class EmailService:
                 lwd = EmailService._fmt_date(rec.last_working_date)
                 row_html += f"""
                 <tr>
-                  <td style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;color:#d9534f;border-bottom:1px solid #ececec;">{rm_name}</td>
-                  <td style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;">{rec.person_number}</td>
-                  <td style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;">{rec.employee_name}</td>
-                  <td style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;">{rec.department or '—'}</td>
-                  <td style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;">{lwd}</td>
+                  <td style="padding:10px 14px;font-family:'Adani','Rubik',Arial,sans-serif;font-size:13px;font-weight:bold;color:#003b70;border-bottom:1px solid #e2e8f0;">{rm_name}</td>
+                  <td style="padding:10px 14px;font-family:'Adani','Rubik',Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #e2e8f0;">{rec.person_number}</td>
+                  <td style="padding:10px 14px;font-family:'Adani','Rubik',Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #e2e8f0;">{rec.employee_name}</td>
+                  <td style="padding:10px 14px;font-family:'Adani','Rubik',Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #e2e8f0;">{rec.department or '—'}</td>
+                  <td style="padding:10px 14px;font-family:'Adani','Rubik',Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #e2e8f0;">{lwd}</td>
                 </tr>"""
 
-            html_body = f"""<!DOCTYPE html>
-        <html>
-        <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <meta name="x-apple-disable-message-reformatting">
-        <style>
-          body {{ margin: 0; padding: 0; background-color: #f5f7fb; font-family: Arial, sans-serif; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }}
-          table {{ border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; }}
-          .wrapper {{ width: 100% !important; background-color: #f5f7fb; padding: 20px 10px; }}
-          .container {{ width: 100% !important; max-width: 800px !important; margin: 0 auto; background-color: #ffffff; border-radius: 10px; border: 1px solid #e5e7eb; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,.08); }}
-          .table-responsive {{ width: 100% !important; overflow-x: auto !important; -webkit-overflow-scrolling: touch; margin-top: 15px; }}
-          @media only screen and (max-width: 600px) {{
-            .wrapper {{ padding: 10px 4px !important; }}
-            .header {{ padding: 18px 16px !important; }}
-            .header h2 {{ font-size: 18px !important; line-height: 1.3 !important; }}
-            .content {{ padding: 16px 12px !important; font-size: 13px !important; }}
-            th, td {{ padding: 8px 6px !important; font-size: 12px !important; }}
-          }}
-        </style>
-        </head>
-        <body style="background-color:#f5f7fb;font-family:Arial,sans-serif;margin:0;padding:0;">
-        <table width="100%" border="0" cellspacing="0" cellpadding="0" bgcolor="#f5f7fb" class="wrapper" style="background-color:#f5f7fb;width:100%;padding:20px 10px;">
-          <tr>
-            <td align="center">
-              <table class="container" width="100%" border="0" cellspacing="0" cellpadding="0" style="width:100%;max-width:800px;margin:0 auto;background-color:#ffffff;border-radius:10px;border:1px solid #e5e7eb;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08);border-collapse:separate;">
-                <tr>
-                  <td class="header" bgcolor="#d9534f" style="background-color:#d9534f;color:white;padding:25px 35px;">
-                    <h2 style="margin:0;font-family:Arial,sans-serif;font-size:22px;font-weight:bold;color:#ffffff;">Conflicting RM Configurations - Redirected Approvals Report</h2>
-                  </td>
-                </tr>
-                <tr>
-                  <td class="content" style="padding:30px;color:#333333;font-family:Arial,sans-serif;font-size:14px;line-height:1.7;">
-                    <p style="margin:0 0 16px 0;">Dear Team,</p>
-                    <p style="color: #d9534f; font-weight: bold; background-color: #fdf7f7; border: 1px solid #d9534f; padding: 12px; border-radius: 5px; margin-bottom: 15px; margin-top:0;">
-                      Warning: The following pending RM approvals have been redirected to HR because their Reporting Managers have multiple conflicting email configurations in the system. Please resolve these duplicates in the <b>rm_email_configuration</b> database table.
-                    </p>
-                    <div class="table-responsive" style="width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:15px;">
-                      <table width="100%" border="0" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;min-width:480px;">
-                        <thead>
-                          <tr bgcolor="#fdf7f7" style="background-color:#fdf7f7;">
-                            <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:2px solid #d9534f;">Reporting Manager</th>
-                            <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:2px solid #d9534f;">Employee ID</th>
-                            <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:2px solid #d9534f;">Name</th>
-                            <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:2px solid #d9534f;">Department</th>
-                            <th style="padding:12px 14px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-align:left;color:#333333;border-bottom:2px solid #d9534f;">Last Working Date</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {row_html}
-                        </tbody>
-                      </table>
-                    </div>
-                    <p style="margin:20px 0 0 0;">Please review these records and take the necessary actions.</p>
-                  </td>
-                </tr>
-                <tr>
-                  <td class="footer" bgcolor="#fafafa" style="padding:25px 30px;background-color:#fafafa;color:#666666;border-top:1px solid #ececec;font-family:Arial,sans-serif;font-size:12.5px;line-height:1.5;">
-                    Regards,<br>
-                    <b style="color:#333333;">Team HR</b>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-        </table>
-        </body>
-        </html>"""
+            html_body = render_template("duplicate_rm_report", {
+                "row_html": row_html,
+            })
 
             msg = MIMEMultipart("alternative")
             msg["Subject"] = "Redirected RM Approvals Report (Conflicting Manager Configurations) - Action Required"
@@ -1711,60 +1411,10 @@ class EmailService:
                 logger.warning(msg)
                 return {"success": False, "message": msg}
 
-            html_content = f"""
-            <!DOCTYPE html>
-            <html>
-            <head>
-              <meta charset="utf-8">
-              <meta name="viewport" content="width=device-width, initial-scale=1.0">
-              <meta name="x-apple-disable-message-reformatting">
-              <style>
-                body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f6f9; margin: 0; padding: 15px 10px; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }}
-                .card {{ max-width: 540px; width: 100%; margin: 0 auto; background: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }}
-                .header {{ background-color: #003b70; color: #ffffff; padding: 24px; text-align: center; }}
-                .header h1 {{ margin: 0; font-size: 20px; font-weight: 600; letter-spacing: 0.5px; }}
-                .body {{ padding: 32px 24px; color: #334155; line-height: 1.6; font-size: 14px; }}
-                .btn-container {{ text-align: center; margin: 28px 0; }}
-                .btn {{ display: inline-block; background-color: #003b70; color: #ffffff !important; padding: 12px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
-                .footer {{ background-color: #f8fafc; padding: 16px 24px; border-top: 1px solid #f1f5f9; text-align: center; font-size: 12px; color: #64748b; }}
-                .warning {{ background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 12px; font-size: 13px; color: #92400e; border-radius: 0 4px 4px 0; margin-top: 20px; }}
-                @media only screen and (max-width: 600px) {{
-                  body {{ padding: 10px 5px !important; }}
-                  .header {{ padding: 18px 16px !important; }}
-                  .body {{ padding: 20px 16px !important; font-size: 13px !important; }}
-                  .btn {{ padding: 10px 20px !important; font-size: 13px !important; }}
-                }}
-              </style>
-            </head>
-            <body>
-              <div class="card">
-                <div class="header">
-                  <h1>Adani HR NDC Tracking</h1>
-                </div>
-                <div class="body">
-                  <p>Dear Team,</p>
-                  <p>We received a request to reset your password for your <strong>Adani HR NDC Tracking</strong> account.</p>
-                  <p>Click the button below to set a new password:</p>
-                  <div class="btn-container">
-                    <a href="{reset_link}" class="btn" target="_blank">Reset Password</a>
-                  </div>
-                  <p>Or copy and paste this link into your browser:</p>
-                  <p style="word-break: break-all; font-size: 12px; color: #003b70;"><a href="{reset_link}">{reset_link}</a></p>
-                  <div class="warning">
-                    ⏳ This password reset link is valid for <strong>30 minutes</strong>. If you did not request this, please ignore this email.
-                  </div>
-                  <p style="margin-top: 20px; font-size: 14px; color: #475569;">
-                    Regards,<br>
-                    <strong>Team HR</strong>
-                  </p>
-                </div>
-                <div class="footer">
-                  &copy; {datetime.now().year} Adani HR NDC Tracking Platform. All rights reserved.
-                </div>
-              </div>
-            </body>
-            </html>
-            """
+            html_content = render_template("password_reset", {
+                "reset_link": reset_link,
+                "year": datetime.now().year,
+            })
 
             msg = MIMEMultipart("alternative")
             msg["Subject"] = "Password Reset Request – Adani HR NDC Tracking"
