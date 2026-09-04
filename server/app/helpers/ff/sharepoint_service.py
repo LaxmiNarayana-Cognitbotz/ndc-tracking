@@ -2,6 +2,7 @@ import asyncio
 import io
 import logging
 import os
+import time
 import urllib.parse
 import zipfile
 from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
@@ -50,16 +51,21 @@ def _resolve_ssl_verify():
         logger.error(f"Error in _resolve_ssl_verify: {e}", exc_info=True)
         return True
 
+_MSAL_SESSION: Optional[requests.Session] = None
+
 def _get_msal_http_client() -> requests.Session:
     """
-    Returns a requests.Session with SSL verification settings matching
+    Returns a persistent requests.Session with SSL verification settings matching
     the environment configuration. Used as the http_client for MSAL to
-    ensure token acquisition works behind corporate SSL-intercepting proxies.
+    ensure token acquisition works behind corporate SSL-intercepting proxies
+    and reuses TCP connections to avoid socket exhaustion.
     """
+    global _MSAL_SESSION
     try:
-        session = requests.Session()
-        session.verify = _resolve_ssl_verify()
-        return session
+        if _MSAL_SESSION is None:
+            _MSAL_SESSION = requests.Session()
+            _MSAL_SESSION.verify = _resolve_ssl_verify()
+        return _MSAL_SESSION
     except Exception as e:
         logger.error(f"Error in _get_msal_http_client: {e}", exc_info=True)
         raise
@@ -80,223 +86,242 @@ def get_httpx_client(*args, **kwargs) -> httpx.AsyncClient:
         if proxy_enabled and proxy_url and "proxy" not in kwargs:
             kwargs["proxy"] = proxy_url
 
+        if "timeout" not in kwargs:
+            kwargs["timeout"] = httpx.Timeout(30.0, connect=10.0)
+
         return httpx.AsyncClient(*args, **kwargs)
     except Exception as e:
         logger.error(f"Error in get_httpx_client: {e}", exc_info=True)
         raise
 
+# Shared token & metadata caches across all SharePointService instances
+_MSAL_APP: Optional[msal.ConfidentialClientApplication] = None
+_MSAL_CONFIG_KEY: Optional[Tuple[str, str, str]] = None
+_CACHED_ACCESS_TOKEN: Optional[str] = None
+_TOKEN_EXPIRES_AT: float = 0.0
+_TOKEN_LOCK = asyncio.Lock()
+
+_CACHED_SITE_ID: Optional[str] = None
+_CACHED_DRIVE_ID: Optional[str] = None
+_CACHED_FOLDER_PATH_IN_DRIVE: Optional[str] = None
+_METADATA_LOCK = asyncio.Lock()
+
+def _get_msal_app(client_id: str, authority: str, client_secret: str) -> msal.ConfidentialClientApplication:
+    global _MSAL_APP, _MSAL_CONFIG_KEY
+    config_key = (client_id, authority, client_secret)
+    if _MSAL_APP is None or _MSAL_CONFIG_KEY != config_key:
+        _MSAL_APP = msal.ConfidentialClientApplication(
+            client_id,
+            authority=authority,
+            client_credential=client_secret,
+            http_client=_get_msal_http_client()
+        )
+        _MSAL_CONFIG_KEY = config_key
+    return _MSAL_APP
+
 class SharePointService:
     def __init__(self):
         try:
-            # Cached properties to avoid repeating site/drive lookups
-            self._site_id: Optional[str] = None
-            self._drive_id: Optional[str] = None
+            # Environment configuration
+            self.tenant_id: str = os.getenv("SHAREPOINT_TENANT_ID", "").strip()
+            self.client_id: str = os.getenv("SHAREPOINT_CLIENT_ID", "").strip()
+            self.client_secret: str = os.getenv("SHAREPOINT_CLIENT_SECRET", "").strip()
+            self.site_url: str = os.getenv("SHAREPOINT_SITE_URL", "").strip()
+            self.target_folder: str = os.getenv("SHAREPOINT_TARGET_FOLDER", "").strip()
+
+            # Cached properties populated from class-level cache if available
+            self._site_id: Optional[str] = _CACHED_SITE_ID
+            self._drive_id: Optional[str] = _CACHED_DRIVE_ID
         except Exception as e:
             logger.error(f"Error in SharePointService.__init__: {e}", exc_info=True)
 
     @property
-    def tenant_id(self) -> str:
-        try:
-            val = os.getenv("SHAREPOINT_TENANT_ID")
-            if not val:
-                raise Exception("SHAREPOINT_TENANT_ID environment variable is missing.")
-            return val
-        except Exception as e:
-            logger.error(f"Error in tenant_id: {e}", exc_info=True)
-            raise
-
-    @property
-    def client_id(self) -> str:
-        try:
-            val = os.getenv("SHAREPOINT_CLIENT_ID")
-            if not val:
-                raise Exception("SHAREPOINT_CLIENT_ID environment variable is missing.")
-            return val
-        except Exception as e:
-            logger.error(f"Error in client_id: {e}", exc_info=True)
-            raise
-
-    @property
-    def client_secret(self) -> str:
-        try:
-            val = os.getenv("SHAREPOINT_CLIENT_SECRET")
-            if not val:
-                raise Exception("SHAREPOINT_CLIENT_SECRET environment variable is missing.")
-            return val
-        except Exception as e:
-            logger.error(f"Error in client_secret: {e}", exc_info=True)
-            raise
-
-    @property
-    def site_url(self) -> str:
-        try:
-            val = os.getenv("SHAREPOINT_SITE_URL")
-            if not val:
-                raise Exception("SHAREPOINT_SITE_URL environment variable is missing.")
-            return val
-        except Exception as e:
-            logger.error(f"Error in site_url: {e}", exc_info=True)
-            raise
-
-    @property
-    def target_folder(self) -> str:
-        try:
-            val = os.getenv("SHAREPOINT_TARGET_FOLDER")
-            if not val:
-                raise Exception("SHAREPOINT_TARGET_FOLDER environment variable is missing.")
-            return val
-        except Exception as e:
-            logger.error(f"Error in target_folder: {e}", exc_info=True)
-            raise
-
-    @property
     def authority(self) -> str:
-        try:
-            return f"https://login.microsoftonline.com/{self.tenant_id}"
-        except Exception as e:
-            logger.error(f"Error in authority: {e}", exc_info=True)
-            raise
+        return f"https://login.microsoftonline.com/{self.tenant_id}"
 
     @property
     def scopes(self) -> list[str]:
-        try:
-            return ["https://graph.microsoft.com/.default"]
-        except Exception as e:
-            logger.error(f"Error in scopes: {e}", exc_info=True)
-            raise
+        return ["https://graph.microsoft.com/.default"]
 
-    async def get_access_token(self) -> str:
-        """Obtain a Microsoft Graph API access token using client credentials flow."""
+    async def get_access_token(self, force_refresh: bool = False) -> str:
+        """Obtain a Microsoft Graph API access token using client credentials flow with in-memory caching."""
+        global _CACHED_ACCESS_TOKEN, _TOKEN_EXPIRES_AT
         try:
             if not self.tenant_id or not self.client_id or not self.client_secret:
                 raise Exception("SharePoint credentials are not configured in environment variables.")
 
-            app = msal.ConfidentialClientApplication(
-                self.client_id,
-                authority=self.authority,
-                client_credential=self.client_secret,
-                http_client=_get_msal_http_client()
-            )
-            
-            # First check MSAL internal cache
-            result = app.acquire_token_silent(self.scopes, account=None)
-            if not result:
-                logger.info("No cached token found. Requesting a new token from Azure AD.")
-                # Run the synchronous token fetch in a thread pool to keep FastAPI non-blocking
-                result = await asyncio.to_thread(
-                    app.acquire_token_for_client,
-                    scopes=self.scopes
-                )
+            # Fast path: return cached token if still valid (with 5-minute safety window)
+            now = time.time()
+            if not force_refresh and _CACHED_ACCESS_TOKEN and now < (_TOKEN_EXPIRES_AT - 300):
+                return _CACHED_ACCESS_TOKEN
+
+            async with _TOKEN_LOCK:
+                # Double-check inside lock
+                now = time.time()
+                if not force_refresh and _CACHED_ACCESS_TOKEN and now < (_TOKEN_EXPIRES_AT - 300):
+                    return _CACHED_ACCESS_TOKEN
+
+                app = _get_msal_app(self.client_id, self.authority, self.client_secret)
                 
-            if "access_token" in result:
-                return result["access_token"]
-            else:
-                error_msg = result.get("error_description") or result.get("error") or "Unknown error"
-                logger.error(f"SharePoint authentication failed: {error_msg}")
-                raise Exception(f"SharePoint authentication failed: {error_msg}")
+                # Check MSAL's internal cache first
+                result = None
+                if not force_refresh:
+                    result = app.acquire_token_silent(self.scopes, account=None)
+
+                if not result or force_refresh:
+                    logger.info("Acquiring fresh access token from Azure AD.")
+                    result = await asyncio.to_thread(
+                        app.acquire_token_for_client,
+                        scopes=self.scopes
+                    )
+                    
+                if "access_token" in result:
+                    _CACHED_ACCESS_TOKEN = result["access_token"]
+                    expires_in = float(result.get("expires_in", 3600))
+                    _TOKEN_EXPIRES_AT = time.time() + expires_in
+                    logger.info(f"Cached SharePoint access token successfully (valid for {int(expires_in)}s).")
+                    return _CACHED_ACCESS_TOKEN
+                else:
+                    error_msg = result.get("error_description") or result.get("error") or "Unknown error"
+                    logger.error(f"SharePoint authentication failed: {error_msg}")
+                    raise Exception(f"SharePoint authentication failed: {error_msg}")
         except Exception as e:
             logger.error(f"Error in get_access_token: {e}", exc_info=True)
             raise
 
     async def get_site_id(self, client: httpx.AsyncClient) -> str:
-        """Resolve the SharePoint Site ID from the SHAREPOINT_SITE_URL."""
+        """Resolve the SharePoint Site ID from the SHAREPOINT_SITE_URL, caching across calls."""
+        global _CACHED_SITE_ID
         try:
             if self._site_id:
                 return self._site_id
+            if _CACHED_SITE_ID:
+                self._site_id = _CACHED_SITE_ID
+                return self._site_id
 
-            if not self.site_url:
-                raise Exception("SHAREPOINT_SITE_URL is not configured.")
+            async with _METADATA_LOCK:
+                if _CACHED_SITE_ID:
+                    self._site_id = _CACHED_SITE_ID
+                    return self._site_id
 
-            parsed_url = urllib.parse.urlparse(self.site_url)
-            hostname = parsed_url.netloc
-            relative_path = parsed_url.path.rstrip("/")
-            
-            token = await self.get_access_token()
-            headers = {"Authorization": f"Bearer {token}"}
-            
-            # Graph API format for sites: sites/{hostname}:/{relative-path}
-            url = f"https://graph.microsoft.com/v1.0/sites/{hostname}:{relative_path}"
-            logger.info(f"Resolving Site ID from URL: {url}")
-            
-            response = await client.get(url, headers=headers)
-            if response.status_code != 200:
-                logger.error(f"Failed to resolve site ID. Status: {response.status_code}, Body: {response.text}")
-                raise Exception(f"Failed to resolve site ID: {response.status_code} - {response.text}")
+                if not self.site_url:
+                    raise Exception("SHAREPOINT_SITE_URL is not configured.")
+
+                parsed_url = urllib.parse.urlparse(self.site_url)
+                hostname = parsed_url.netloc
+                relative_path = parsed_url.path.rstrip("/")
                 
-            site_data = response.json()
-            self._site_id = site_data.get("id")
-            if not self._site_id:
-                raise Exception("Site details resolved but 'id' field is missing.")
+                token = await self.get_access_token()
+                headers = {"Authorization": f"Bearer {token}"}
                 
-            logger.info(f"Resolved Site ID: {self._site_id}")
-            return self._site_id
+                # Graph API format for sites: sites/{hostname}:/{relative-path}
+                url = f"https://graph.microsoft.com/v1.0/sites/{hostname}:{relative_path}"
+                logger.info(f"Resolving Site ID from URL: {url}")
+                
+                response = await client.get(url, headers=headers)
+                if response.status_code == 401:
+                    token = await self.get_access_token(force_refresh=True)
+                    headers = {"Authorization": f"Bearer {token}"}
+                    response = await client.get(url, headers=headers)
+
+                if response.status_code != 200:
+                    logger.error(f"Failed to resolve site ID. Status: {response.status_code}, Body: {response.text}")
+                    raise Exception(f"Failed to resolve site ID: {response.status_code} - {response.text}")
+                    
+                site_data = response.json()
+                self._site_id = site_data.get("id")
+                if not self._site_id:
+                    raise Exception("Site details resolved but 'id' field is missing.")
+                    
+                _CACHED_SITE_ID = self._site_id
+                logger.info(f"Resolved and cached Site ID: {self._site_id}")
+                return self._site_id
         except Exception as e:
             logger.error(f"Error in get_site_id: {e}", exc_info=True)
             raise
 
+    def _compute_drive_and_folder_path(self) -> Tuple[str, str]:
+        """Compute the drive name and relative path inside that drive."""
+        if not self.target_folder:
+            raise Exception("SHAREPOINT_TARGET_FOLDER is not configured.")
+
+        parsed_site = urllib.parse.urlparse(self.site_url)
+        site_path = parsed_site.path.rstrip("/")
+        
+        folder = self.target_folder
+        if folder.startswith(site_path):
+            folder = folder[len(site_path):]
+        folder = folder.strip("/")
+        
+        parts = [p for p in folder.split("/") if p]
+        if not parts:
+            drive_name = "Shared Documents"
+            folder_path_in_drive = ""
+        else:
+            drive_name = parts[0]
+            folder_path_in_drive = "/".join(parts[1:])
+        return drive_name, folder_path_in_drive
+
     async def get_drive_details(self, client: httpx.AsyncClient, site_id: str) -> Tuple[str, str]:
         """
         Resolves the Drive ID (Document Library ID) and the base folder path inside that drive
-        from the SHAREPOINT_TARGET_FOLDER environment variable.
+        from the SHAREPOINT_TARGET_FOLDER environment variable, caching across calls.
         """
+        global _CACHED_DRIVE_ID, _CACHED_FOLDER_PATH_IN_DRIVE
         try:
+            drive_name, folder_path_in_drive = self._compute_drive_and_folder_path()
+
+            # Early return if already cached
             if self._drive_id:
-                # Recompute folder path since it depends on target_folder
-                pass
+                return self._drive_id, folder_path_in_drive
+            if _CACHED_DRIVE_ID:
+                self._drive_id = _CACHED_DRIVE_ID
+                return self._drive_id, folder_path_in_drive
 
-            if not self.target_folder:
-                raise Exception("SHAREPOINT_TARGET_FOLDER is not configured.")
+            async with _METADATA_LOCK:
+                if _CACHED_DRIVE_ID:
+                    self._drive_id = _CACHED_DRIVE_ID
+                    return self._drive_id, folder_path_in_drive
 
-            # Determine relative folder after the site prefix
-            parsed_site = urllib.parse.urlparse(self.site_url)
-            site_path = parsed_site.path.rstrip("/")
-            
-            folder = self.target_folder
-            if folder.startswith(site_path):
-                folder = folder[len(site_path):]
-            folder = folder.strip("/")
-            
-            # Split target folder path. e.g. "Shared Documents/AI_AGEL/001_AI_Project/AI05_NDC_Tracker"
-            parts = [p for p in folder.split("/") if p]
-            if not parts:
-                drive_name = "Shared Documents"
-                folder_path_in_drive = ""
-            else:
-                drive_name = parts[0]
-                folder_path_in_drive = "/".join(parts[1:])
+                logger.info(f"Target drive name: '{drive_name}', path inside drive: '{folder_path_in_drive}'")
                 
-            logger.info(f"Target drive name: '{drive_name}', path inside drive: '{folder_path_in_drive}'")
-            
-            token = await self.get_access_token()
-            headers = {"Authorization": f"Bearer {token}"}
-            
-            # Fetch drives list to map drive_name to drive_id
-            url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drives"
-            response = await client.get(url, headers=headers)
-            if response.status_code != 200:
-                logger.error(f"Failed to list drives. Status: {response.status_code}, Body: {response.text}")
-                raise Exception(f"Failed to list drives: {response.status_code}")
+                token = await self.get_access_token()
+                headers = {"Authorization": f"Bearer {token}"}
                 
-            drives = response.json().get("value", [])
-            drive_id = None
-            for d in drives:
-                name = d.get("name")
-                if name == drive_name or (drive_name == "Shared Documents" and name == "Documents") or (drive_name == "Documents" and name == "Shared Documents"):
-                    drive_id = d.get("id")
-                    break
+                # Fetch drives list to map drive_name to drive_id
+                url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drives"
+                response = await client.get(url, headers=headers)
+                if response.status_code == 401:
+                    token = await self.get_access_token(force_refresh=True)
+                    headers = {"Authorization": f"Bearer {token}"}
+                    response = await client.get(url, headers=headers)
+
+                if response.status_code != 200:
+                    logger.error(f"Failed to list drives. Status: {response.status_code}, Body: {response.text}")
+                    raise Exception(f"Failed to list drives: {response.status_code}")
                     
-            if not drive_id:
-                logger.warning(f"Drive '{drive_name}' not found in drives list. Falling back to site default drive.")
-                default_drive_url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drive"
-                res = await client.get(default_drive_url, headers=headers)
-                if res.status_code == 200:
-                    drive_id = res.json().get("id")
-                else:
-                    raise Exception(f"Failed to resolve document library '{drive_name}' or site default drive: {res.text}")
-                    
-            self._drive_id = drive_id
-            logger.info(f"Resolved Drive ID: {self._drive_id}")
-            return drive_id, folder_path_in_drive
+                drives = response.json().get("value", [])
+                drive_id = None
+                for d in drives:
+                    name = d.get("name")
+                    if name == drive_name or (drive_name == "Shared Documents" and name == "Documents") or (drive_name == "Documents" and name == "Shared Documents"):
+                        drive_id = d.get("id")
+                        break
+                        
+                if not drive_id:
+                    logger.warning(f"Drive '{drive_name}' not found in drives list. Falling back to site default drive.")
+                    default_drive_url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drive"
+                    res = await client.get(default_drive_url, headers=headers)
+                    if res.status_code == 200:
+                        drive_id = res.json().get("id")
+                    else:
+                        raise Exception(f"Failed to resolve document library '{drive_name}' or site default drive: {res.text}")
+                        
+                self._drive_id = drive_id
+                _CACHED_DRIVE_ID = drive_id
+                _CACHED_FOLDER_PATH_IN_DRIVE = folder_path_in_drive
+                logger.info(f"Resolved and cached Drive ID: {self._drive_id}")
+                return drive_id, folder_path_in_drive
         except Exception as e:
             logger.error(f"Error in get_drive_details: {e}", exc_info=True)
             raise
@@ -334,20 +359,33 @@ class SharePointService:
                 candidates.append(f"F&F_Documents/{person_number}")
                 candidates.append(person_number)
 
-            async def fetch_candidate(candidate_path):
+            async def fetch_candidate(candidate_path, auth_headers):
                 try:
                     clean_path = "/".join([p for p in candidate_path.split("/") if p])
                     encoded_path = self._encode_path_segments(clean_path)
                     url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drives/{drive_id}/root:/{encoded_path}:/children"
                     logger.info(f"Querying SharePoint path: {clean_path} (Encoded: {encoded_path})")
-                    response = await client.get(url, headers=headers)
+                    response = await client.get(url, headers=auth_headers)
                     return response, clean_path
                 except Exception as e:
                     logger.error(f"Error in fetch_candidate for {candidate_path}: {e}")
                     raise
 
-            tasks = [fetch_candidate(cp) for cp in candidates]
+            tasks = [fetch_candidate(cp, headers) for cp in candidates]
             results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            # Check if any candidate returned 401 Unauthorized (token expired)
+            needs_auth_retry = False
+            for result in results:
+                if isinstance(result, tuple) and result[0].status_code == 401:
+                    needs_auth_retry = True
+                    break
+
+            if needs_auth_retry:
+                token = await self.get_access_token(force_refresh=True)
+                headers = {"Authorization": f"Bearer {token}"}
+                tasks = [fetch_candidate(cp, headers) for cp in candidates]
+                results = await asyncio.gather(*tasks, return_exceptions=True)
 
             for result in results:
                 if isinstance(result, Exception):
