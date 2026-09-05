@@ -117,6 +117,8 @@ class EmailService:
                     status_td = '<td style="padding:10px 14px;font-family:\'Adani\',\'Rubik\',Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;"><span style="background-color:#ffe5e5;color:#d62828;padding:4px 10px;border-radius:12px;font-weight:600;display:inline-block;">Revision Required</span></td>'
                 elif reminder_type == "fnf_paid":
                     status_td = '<td style="padding:10px 14px;font-family:\'Adani\',\'Rubik\',Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;"><span style="background-color:#fef3c7;color:#b45309;padding:4px 10px;border-radius:12px;font-weight:600;display:inline-block;">F&amp;F Paid (DMS Pending)</span></td>'
+                elif reminder_type == "gcc_pending":
+                    status_td = '<td style="padding:10px 14px;font-family:\'Adani\',\'Rubik\',Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;"><span style="background-color:#eff6ff;color:#1d4ed8;padding:4px 10px;border-radius:12px;font-weight:600;display:inline-block;">GCC Pending</span></td>'
                 else:
                     status_td = f'<td style="padding:10px 14px;font-family:\'Adani\',\'Rubik\',Arial,sans-serif;font-size:13px;color:#333333;border-bottom:1px solid #ececec;"><span style="background-color:#ffe5e5;color:#d62828;padding:4px 10px;border-radius:12px;font-weight:600;display:inline-block;">{days} Days</span></td>'
 
@@ -149,6 +151,11 @@ class EmailService:
                 intro = f"Please find below the list of F&F paid employees whose DMS document upload is still pending as of today ({EmailService._fmt_date(date.today())})."
                 col_5 = "F&F Status"
                 outro = "Kindly upload the DMS documents for these employees at the earliest to close the settlement loop."
+            elif reminder_type == "gcc_pending":
+                title = "Pending NDC with GCC HR Report"
+                intro = f"Please find below the list of NDC cases pending with GCC HR approval as of today ({EmailService._fmt_date(date.today())})."
+                col_5 = "NDC Stage"
+                outro = "Kindly review these records and complete the necessary GCC HR approvals at the earliest."
             else:
                 title = "NDC Delayed Cases Report"
                 intro = f"Please find below the top delayed NDC cases identified as of {EmailService._fmt_date(date.today())}."
@@ -228,6 +235,9 @@ class EmailService:
             elif reminder_type == "fnf_paid":
                 subj_title = "F&F Paid — DMS Upload Pending"
                 subject_line = f"{subj_title} – {len(records)} Records ({EmailService._fmt_date(date.today())})"
+            elif reminder_type == "gcc_pending":
+                subj_title = "Pending NDC with GCC HR"
+                subject_line = f"{subj_title} – {len(records)} Records ({EmailService._fmt_date(date.today())})"
             else:
                 subj_title = "NDC Delayed Cases Reminder"
                 subject_line = f"Reminder: Top Delayed NDC Cases ({EmailService._fmt_date(date.today())})"
@@ -239,7 +249,7 @@ class EmailService:
 
             # CC recipient for F&F / GCC HR reminder types
             envelope_recipients = list(recipients_list)
-            if reminder_type in ("fnf_open", "fnf_revision", "fnf_delayed", "fnf_paid"):
+            if reminder_type in ("fnf_open", "fnf_revision", "fnf_delayed", "fnf_paid", "gcc_pending"):
                 cc_recipient = os.getenv("FNF_EMAIL_CC") or os.getenv("EMAIL_CC", "")
                 if cc_recipient:
                     cc_list = EmailService._parse_recipients(cc_recipient)
@@ -876,6 +886,8 @@ class EmailService:
                     # Handle GCC HR vs HR carefully
                     if "gcc hr" in stage:
                         key = "gcc hr"
+                    elif "security" in stage:
+                        key = "security"
                     elif "hr" in stage:
                         key = "hr"
                     elif "rm" in stage:
@@ -884,12 +896,10 @@ class EmailService:
                         key = "telecom"
                     elif "administration" in stage or "admin" in stage:
                         key = "administration"
-                    elif "it" in stage:
+                    elif stage in ("it", "it approval", "it approvals") or stage == "it":
                         key = "it"
                     elif "safety" in stage:
                         key = "safety"
-                    elif "security" in stage:
-                        key = "security"
                     elif "final abex" in stage:
                         key = "final abex"
                     elif "abex" in stage:

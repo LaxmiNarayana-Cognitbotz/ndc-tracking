@@ -369,7 +369,15 @@ export function Overview() {
     return "";
   };
 
-  const FullScreenTable = ({ data, title }: { data: NDCRecord[]; title: string }) => {
+  const FullScreenTable = ({
+    data,
+    title,
+    onSendReminder,
+  }: {
+    data: NDCRecord[];
+    title: string;
+    onSendReminder?: () => void;
+  }) => {
     const [page, setPage] = useState(1);
     const [tableItemsPerPage, setTableItemsPerPage] = useState(20);
     const totalPages = Math.max(1, Math.ceil(data.length / tableItemsPerPage));
@@ -380,24 +388,36 @@ export function Overview() {
       <div className="flex flex-col h-full">
         <div className="p-4 border-b border-border flex items-center justify-between shrink-0 bg-card">
           <h3 className="font-semibold text-foreground">{title} ({data.length})</h3>
-          <button
-            disabled={data.length === 0}
-            onClick={() => {
-              const mappedData = data.map(r => ({
-                "Person No.": r.personNumber,
-                "Name": r.employeeName,
-                "Department": r.department,
-                "Last Working Date": formatDate(r.lastWorkingDate),
-                "NDC Stage": r.ndcStage,
-                "Pending Departments": getPendingDepartments(r),
-              }));
-              exportToExcel(mappedData, title || "Export");
-            }}
-            className="flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground rounded-[4px] hover:bg-primary/90 transition-colors text-sm disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            <Download className="w-3 h-3" />
-            Export
-          </button>
+          <div className="flex items-center gap-2">
+            {onSendReminder && (
+              <button
+                disabled={data.length === 0}
+                onClick={onSendReminder}
+                className="flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground rounded-[4px] hover:bg-primary/90 transition-colors text-sm disabled:opacity-60 disabled:cursor-not-allowed shadow-sm font-medium"
+              >
+                <Mail className="w-3.5 h-3.5" />
+                Send Email
+              </button>
+            )}
+            <button
+              disabled={data.length === 0}
+              onClick={() => {
+                const mappedData = data.map(r => ({
+                  "Person No.": r.personNumber,
+                  "Name": r.employeeName,
+                  "Department": r.department,
+                  "Last Working Date": formatDate(r.lastWorkingDate),
+                  "NDC Stage": r.ndcStage,
+                  "Pending Departments": getPendingDepartments(r),
+                }));
+                exportToExcel(mappedData, title || "Export");
+              }}
+              className="flex items-center gap-2 px-3 py-1.5 bg-muted hover:bg-accent text-foreground border border-border rounded-[4px] transition-colors text-sm disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Export
+            </button>
+          </div>
         </div>
         <div className="overflow-x-auto overflow-y-auto flex-1">
           <table className="w-full text-sm">
@@ -739,7 +759,13 @@ export function Overview() {
       <Dialog open={reminderMailDialogOpen} onOpenChange={setReminderMailDialogOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Send email</DialogTitle>
+            <DialogTitle>
+              {reminderMailType === "gcc_pending"
+                ? "Send Pending NDC with GCC Email"
+                : reminderMailType === "ndc_delayed"
+                ? "Send Delayed NDC Reminder Email"
+                : "Send Reminder Email"}
+            </DialogTitle>
           </DialogHeader>
           <div className="p-4 space-y-4">
             <div>
@@ -940,7 +966,17 @@ export function Overview() {
 
       {/* Pending Approval Modal */}
       <FullScreenModal open={pendingApprovalModalOpen} onClose={() => setPendingApprovalModalOpen(false)} title="Pending NDC with GCC">
-        <FullScreenTable data={mockNDCData.filter((r) => r.ndcStage === "GCC Pending")} title="Pending NDC with GCC" />
+        <FullScreenTable
+          data={mockNDCData.filter((r) => r.ndcStage === "GCC Pending")}
+          title="Pending NDC with GCC"
+          /* Manual email send commented out for Pending NDC with GCC
+          onSendReminder={() => {
+            setReminderMailEmailTo("");
+            setReminderMailType("gcc_pending");
+            setReminderMailDialogOpen(true);
+          }}
+          */
+        />
       </FullScreenModal>
 
       {/* Overdue Modal */}

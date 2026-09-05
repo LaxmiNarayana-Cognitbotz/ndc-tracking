@@ -175,6 +175,19 @@ class EmailRecipientService:
                     key=lambda r: EmailService._days_delayed(r.last_working_date),
                     reverse=True,
                 )
+            elif payload_type == "gcc_pending":
+                # Pending NDC with GCC HR
+                result = await db.execute(
+                    select(NdcRecord).where(
+                        NdcRecord.ndc_stage == "GCC Pending",
+                    )
+                )
+                records = result.scalars().all()
+                sorted_records = sorted(
+                    records,
+                    key=lambda r: r.last_working_date or date.min,
+                    reverse=True,
+                )
             else:
                 # Default: ndc_delayed
                 # Fetch overdue non-completed records delayed by > 30 days (Top Delayed Cases, matching dashboard card)
