@@ -2,13 +2,19 @@ import { useState } from "react";
 import { Presentation } from "lucide-react";
 
 interface PPTDownloadButtonProps {
-  onDownload: () => Promise<void>;
+  onDownload?: () => Promise<void>;
+  onClick?: () => void;
 }
 
-export function PPTDownloadButton({ onDownload }: PPTDownloadButtonProps) {
+export function PPTDownloadButton({ onDownload, onClick }: PPTDownloadButtonProps) {
   const [loading, setLoading] = useState(false);
 
   const handleClick = async () => {
+    if (onClick) {
+      onClick();
+      return;
+    }
+    if (!onDownload) return;
     setLoading(true);
     try {
       await onDownload();
