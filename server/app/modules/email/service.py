@@ -251,13 +251,23 @@ class EmailService:
             envelope_recipients = list(recipients_list)
             if reminder_type in ("fnf_open", "fnf_revision", "fnf_delayed", "fnf_paid", "gcc_pending"):
                 cc_recipient = os.getenv("FNF_EMAIL_CC") or os.getenv("EMAIL_CC", "")
+                cc_list = []
                 if cc_recipient:
                     cc_list = EmailService._parse_recipients(cc_recipient)
-                    if cc_list:
-                        msg["Cc"] = ", ".join(cc_list)
-                        for c in cc_list:
-                            if c not in envelope_recipients:
-                                envelope_recipients.append(c)
+
+                # Add extra CC specifically for F&F Open List Records (manual reminder)
+                if reminder_type == "fnf_open":
+                    extra_cc = os.getenv("FNF_OPEN_EMAIL_CC", "")
+                    if extra_cc:
+                        for extra in EmailService._parse_recipients(extra_cc):
+                            if extra.lower() not in [c.lower() for c in cc_list]:
+                                cc_list.append(extra)
+
+                if cc_list:
+                    msg["Cc"] = ", ".join(cc_list)
+                    for c in cc_list:
+                        if c not in envelope_recipients:
+                            envelope_recipients.append(c)
 
             msg.attach(MIMEText(html_body, "html"))
 
@@ -748,13 +758,23 @@ class EmailService:
             clean_dept_lower = clean_dept.lower()
             if clean_dept_lower in ("gcc hr", "f&f team", "f&f open", "f&f revision required", "f&f revision", "fnf team", "fnf"):
                 cc_recipient = os.getenv("FNF_EMAIL_CC") or os.getenv("EMAIL_CC", "")
+                cc_list = []
                 if cc_recipient:
                     cc_list = EmailService._parse_recipients(cc_recipient)
-                    if cc_list:
-                        msg["Cc"] = ", ".join(cc_list)
-                        for c in cc_list:
-                            if c not in envelope_recipients:
-                                envelope_recipients.append(c)
+
+                # Add extra CC strictly and exclusively for F&F Open List Records (automated notification)
+                if header_title == "F&F Open List Records":
+                    extra_cc = os.getenv("FNF_OPEN_EMAIL_CC", "")
+                    if extra_cc:
+                        for extra in EmailService._parse_recipients(extra_cc):
+                            if extra.lower() not in [c.lower() for c in cc_list]:
+                                cc_list.append(extra)
+
+                if cc_list:
+                    msg["Cc"] = ", ".join(cc_list)
+                    for c in cc_list:
+                        if c not in envelope_recipients:
+                            envelope_recipients.append(c)
 
             msg.attach(MIMEText(html_body, "html"))
 
