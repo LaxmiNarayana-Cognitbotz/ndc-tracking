@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect } from "react";
 import axios from "../../lib/axios";
 import { NDCRecord } from "../../types";
 import { PPTDownloadButton } from "../../components/common/PPTDownloadButton";
+import { PPTExportChoiceModal } from "../../components/common/PPTExportChoiceModal";
 import { LoadingScreen } from "../../components/common/LoadingScreen";
 import { exportToExcel } from "../../utils/excelExport";
 import { getPendingDepartments } from "../../utils/pendingDepartments";
@@ -116,6 +117,7 @@ export function Analytics() {
   const [bottleneckApprovalFilter, setBottleneckApprovalFilter] = useState("");
   const [ndcChartApprovalFilter, setNdcChartApprovalFilter] = useState("");
   const [topDelayedFilter, setTopDelayedFilter] = useState<"All" | "NDC" | "F&F">("All");
+  const [isPPTModalOpen, setIsPPTModalOpen] = useState(false);
 
 
   // NDC Status data for Highcharts Pie + Bar
@@ -640,6 +642,21 @@ export function Analytics() {
     await pptx.writeFile({ fileName: "Analytics_Dashboard.pptx" });
   };
 
+  const handleDownloadEditablePPT = async () => {
+    const { exportAnalyticsEditablePPT } = await import("../../utils/analyticsEditablePPT");
+    await exportAnalyticsEditablePPT({
+      statusData,
+      ndcAnalysisData,
+      fnfStatusBreakdownData,
+      fnfAnalysisData,
+      approvalBottleneckData,
+      fnfRevisionTATData,
+      monthlyTrendData,
+      fnfClosedTATData,
+      ndcClosedTATData,
+    });
+  };
+
   return (
     <div className="p-8 space-y-6">
       <div className="mb-8 flex items-center justify-between">
@@ -647,8 +664,18 @@ export function Analytics() {
           <h1 className="text-3xl font-bold text-foreground">Analytics Dashboard</h1>
           <p className="text-muted-foreground mt-2">Insights &amp; Performance Metrics</p>
         </div>
+        {/* Direct download enabled; modal open commented out for now */}
         <PPTDownloadButton onDownload={handleDownloadPPT} />
+        {/* <PPTDownloadButton onClick={() => setIsPPTModalOpen(true)} /> */}
       </div>
+
+      {/* Choice modal commented out for now (can be re-enabled later for editable vs screenshot choice) */}
+      {/* <PPTExportChoiceModal
+        isOpen={isPPTModalOpen}
+        onClose={() => setIsPPTModalOpen(false)}
+        onExportDashboard={handleDownloadPPT}
+        onExportEditable={handleDownloadEditablePPT}
+      /> */}
 
       {/* NDC Status Overview — Pie 50% left + NDC Analysis bar 50% right */}
       <div className="bg-card rounded-[4px] p-6 border border-border" id="section-ndc-overview">

@@ -64,6 +64,7 @@ class CommonNDCRecord(BaseModel):
     is_fnf_completed: bool = False
     is_fnf_closed: bool = False
     is_fnf_revision: bool = False
+    is_fnf_paid: bool = False
     gcc_initiate_date: str = ""
     fnf_document_count: int = 0
     fnf_revision_start_date: str = ""
@@ -79,5 +80,6 @@ class FnfUpdateRequest(BaseModel):
     is_fnf_completed: Optional[bool] = None
     is_fnf_closed: Optional[bool] = None
     is_fnf_revision: Optional[bool] = None
+    is_fnf_paid: Optional[bool] = None
     fnf_document_count: Optional[int] = None
     fnf_revision_comment: Optional[str] = None

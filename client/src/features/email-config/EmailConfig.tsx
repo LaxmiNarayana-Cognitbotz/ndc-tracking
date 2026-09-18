@@ -111,11 +111,14 @@ export function EmailConfig() {
       toast.error("Name, Email, and Department are required.");
       return;
     }
-    // Client-side duplicate check
+    // Client-side duplicate check (per department)
     const emailLower = newRecipient.email.trim().toLowerCase();
-    const isDuplicate = recipients.some((r) => r.email.toLowerCase() === emailLower);
+    const deptLower = newRecipient.department.trim().toLowerCase();
+    const isDuplicate = recipients.some(
+      (r) => r.email.toLowerCase() === emailLower && (r.department || "").trim().toLowerCase() === deptLower
+    );
     if (isDuplicate) {
-      toast.error("A recipient with this email already exists.");
+      toast.error("A recipient with this email already exists in this department.");
       return;
     }
     axios.post("/api/v1/email-recipients", { ...newRecipient, email: emailLower })
@@ -152,13 +155,17 @@ export function EmailConfig() {
       toast.error("Name, Email, and Department are required.");
       return;
     }
-    // Client-side duplicate check – exclude the row being edited
+    // Client-side duplicate check – exclude the row being edited (per department)
     const emailLower = editDraft.email.trim().toLowerCase();
+    const deptLower = editDraft.department.trim().toLowerCase();
     const isDuplicate = recipients.some(
-      (r) => r.email.toLowerCase() === emailLower && r.id !== editingId
+      (r) =>
+        r.email.toLowerCase() === emailLower &&
+        (r.department || "").trim().toLowerCase() === deptLower &&
+        r.id !== editingId
     );
     if (isDuplicate) {
-      toast.error("Another recipient with this email already exists.");
+      toast.error("Another recipient with this email already exists in this department.");
       return;
     }
     setIsSaving(true);

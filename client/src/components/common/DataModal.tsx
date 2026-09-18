@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, Download, ChevronLeft, ChevronRight } from "lucide-react";
+import { X, Download, ChevronLeft, ChevronRight, Mail } from "lucide-react";
 import { NDCRecord } from "../../types";
 import { StatusBadge } from "./StatusBadge";
 import { exportToExcel } from "../../utils/excelExport";
@@ -14,7 +14,7 @@ interface DataModalProps {
   onSendReminder?: (type: string) => void;
 }
 
-export function DataModal({ isOpen, onClose, title, data }: DataModalProps) {
+export function DataModal({ isOpen, onClose, title, data, onSendReminder }: DataModalProps) {
   if (!isOpen) return null;
 
   const [currentPage, setCurrentPage] = useState(1);
@@ -63,6 +63,17 @@ export function DataModal({ isOpen, onClose, title, data }: DataModalProps) {
             {title} ({data.length})
           </h2>
           <div className="flex items-center gap-2">
+            {/* Manual email send commented out for Pending NDC with GCC */}
+            {onSendReminder && !title.toLowerCase().includes("gcc") && (
+              <button
+                disabled={data.length === 0}
+                onClick={() => onSendReminder("ndc_delayed")}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground text-xs rounded-[4px] hover:bg-primary/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed font-medium shadow-sm"
+              >
+                <Mail className="w-3.5 h-3.5" />
+                Send Email
+              </button>
+            )}
             <button
               disabled={data.length === 0}
               onClick={() => exportToExcel(data, title.replace(/ /g, "_"))}

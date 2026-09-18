@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* {{ font_css }} */
+  body { margin: 0; padding: 0; background-color: #f8fafc; font-family: 'Adani', 'Rubik', Arial, sans-serif; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+  table { border-collapse: collapse; }
+  .wrapper { width: 100% !important; background-color: #f8fafc; padding: 20px 10px; }
+  .container { width: 100% !important; max-width: 800px !important; margin: 0 auto; background-color: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,.05); }
+  @media only screen and (max-width: 600px) {
+    .wrapper { padding: 10px 4px !important; }
+    .header { padding: 16px 14px 10px 14px !important; }
+    .header h2 { font-size: 17px !important; line-height: 1.3 !important; }
+    .content { padding: 16px 12px !important; font-size: 13px !important; }
+  }
+</style>
+</head>
+<body style="background-color:#f8fafc;font-family:'Adani','Rubik',Arial,sans-serif;margin:0;padding:0;">
+<table width="100%" border="0" cellspacing="0" cellpadding="0" bgcolor="#f8fafc" class="wrapper" style="background-color:#f8fafc;width:100%;padding:20px 10px;">
+  <tr>
+    <td align="center">
+      <table class="container" width="100%" border="0" cellspacing="0" cellpadding="0" style="width:100%;max-width:800px;margin:0 auto;background-color:#ffffff;border-radius:8px;border:1px solid #e2e8f0;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.05);border-collapse:separate;">
+        <!-- Header -->
+        <tr>
+          <td class="header" style="padding:22px 28px 14px 28px;border-bottom:2px solid #003b70;background-color:#ffffff;">
+            <h2 style="margin:0;font-family:'Adani','Rubik',Arial,sans-serif;font-size:20px;font-weight:700;color:#003b70;letter-spacing:-0.2px;">NDC System — New Access Request</h2>
+          </td>
+        </tr>
+        <!-- Content Area -->
+        <tr>
+          <td class="content" style="padding:24px 28px;color:#333333;font-family:'Adani','Rubik',Arial,sans-serif;font-size:14px;line-height:1.65;">
+            <p style="margin:0 0 14px 0;font-weight:normal;color:#333333;">Dear Team,</p>
+            <p style="margin:0 0 14px 0;color:#333333;">A new user has logged in via SSO for the first time and is requesting administrative access to the <b>NDC &amp; F&amp;F Tracking System</b>.</p>
+
+            <table width="100%" border="0" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;margin:20px 0;border:1px solid #e2e8f0;border-radius:6px;overflow:hidden;">
+              <tr>
+                <td style="padding:10px 14px;font-weight:600;color:#003b70;width:35%;background-color:#f8fafc;border-bottom:1px solid #e2e8f0;font-size:13.5px;">User Name:</td>
+                <td style="padding:10px 14px;color:#333333;border-bottom:1px solid #e2e8f0;font-size:13.5px;">{{ name }}</td>
+              </tr>
+              <tr>
+                <td style="padding:10px 14px;font-weight:600;color:#003b70;width:35%;background-color:#f8fafc;border-bottom:1px solid #e2e8f0;font-size:13.5px;">User Email:</td>
+                <td style="padding:10px 14px;color:#333333;border-bottom:1px solid #e2e8f0;font-size:13.5px;">{{ email }}</td>
+              </tr>
+              <tr>
+                <td style="padding:10px 14px;font-weight:600;color:#003b70;width:35%;background-color:#f8fafc;font-size:13.5px;">Requested Role:</td>
+                <td style="padding:10px 14px;color:#333333;font-size:13.5px;">{{ role }}</td>
+              </tr>
+            </table>
+
+            <p style="margin:0 0 16px 0;color:#333333;">Please review and act on this request immediately by clicking one of the buttons below:</p>
+            
+            <table border="0" cellspacing="0" cellpadding="0" style="margin:24px 0;">
+              <tr>
+                <td align="center" bgcolor="#16a34a" style="border-radius:6px;background-color:#16a34a;padding-right:12px;">
+                  <a href="{{ approve_link }}" target="_blank" style="font-family:'Adani','Rubik',Arial,sans-serif;font-size:13.5px;font-weight:bold;color:#ffffff;text-decoration:none;display:inline-block;padding:12px 24px;border-radius:6px;background-color:#16a34a;">APPROVE ACCESS</a>
+                </td>
+                <td align="center" bgcolor="#dc2626" style="border-radius:6px;background-color:#dc2626;">
+                  <a href="{{ reject_link }}" target="_blank" style="font-family:'Adani','Rubik',Arial,sans-serif;font-size:13.5px;font-weight:bold;color:#ffffff;text-decoration:none;display:inline-block;padding:12px 24px;border-radius:6px;background-color:#dc2626;">REJECT ACCESS</a>
+                </td>
+              </tr>
+            </table>
+
+            <p style="margin:0;font-size:12.5px;color:#64748b;">This email link is single-use and will be invalidated once clicked.</p>
+          </td>
+        </tr>
+        <!-- Footer -->
+        <tr>
+          <td class="footer" bgcolor="#f8fafc" style="padding:18px 28px;background-color:#f8fafc;color:#64748b;border-top:1px solid #e2e8f0;font-family:'Adani','Rubik',Arial,sans-serif;font-size:12px;line-height:1.5;">
+            Regards,<br>
+            <b style="color:#003b70;">Team HR</b>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+</body>
+</html>

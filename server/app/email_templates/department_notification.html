@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* {{ font_css }} */
+  body { margin: 0; padding: 0; background-color: #f8fafc; font-family: 'Adani', 'Rubik', Arial, sans-serif; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+  table { border-collapse: collapse; }
+  .wrapper { width: 100% !important; background-color: #f8fafc; padding: 20px 10px; }
+  .container { width: 100% !important; max-width: 800px !important; margin: 0 auto; background-color: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,.05); }
+  .table-responsive { width: 100% !important; overflow-x: auto !important; -webkit-overflow-scrolling: touch; margin-top: 15px; }
+  @media only screen and (max-width: 600px) {
+    .wrapper { padding: 10px 4px !important; }
+    .header { padding: 16px 14px 10px 14px !important; }
+    .header h2 { font-size: 17px !important; line-height: 1.3 !important; }
+    .content { padding: 16px 12px !important; font-size: 13px !important; }
+    th, td { padding: 8px 6px !important; font-size: 12px !important; }
+  }
+</style>
+</head>
+<body style="background-color:#f8fafc;font-family:'Adani','Rubik',Arial,sans-serif;margin:0;padding:0;">
+<table width="100%" border="0" cellspacing="0" cellpadding="0" bgcolor="#f8fafc" class="wrapper" style="background-color:#f8fafc;width:100%;padding:20px 10px;">
+  <tr>
+    <td align="center">
+      <table class="container" width="100%" border="0" cellspacing="0" cellpadding="0" style="width:100%;max-width:800px;margin:0 auto;background-color:#ffffff;border-radius:8px;border:1px solid #e2e8f0;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.05);">
+        <!-- Simple Clean Header -->
+        <tr>
+          <td class="header" style="padding:22px 28px 14px 28px;border-bottom:2px solid #003b70;background-color:#ffffff;">
+            <h2 style="margin:0;font-family:'Adani','Rubik',Arial,sans-serif;font-size:20px;color:#003b70;font-weight:700;letter-spacing:-0.2px;">{{ header_title }}</h2>
+          </td>
+        </tr>
+
+        <!-- Content Area -->
+        <tr>
+          <td class="content" style="padding:24px 28px;color:#333333;font-family:'Adani','Rubik',Arial,sans-serif;font-size:14px;line-height:1.65;">
+            <p style="margin:0 0 14px 0;font-weight:normal;color:#333333;">{{ greeting }}</p>
+            {{ warning_html }}
+            {{ intro_paragraph }}
+            <div class="table-responsive" style="width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:14px;">
+              <table width="100%" border="0" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;min-width:420px;">
+                <thead>
+                  <tr bgcolor="#f1f5f9" style="background-color:#f1f5f9;">
+                    <th style="padding:10px 14px;font-family:'Adani','Rubik',Arial,sans-serif;font-size:12.5px;font-weight:bold;text-align:left;color:#003b70;border-bottom:1px solid #e2e8f0;">Employee ID</th>
+                    <th style="padding:10px 14px;font-family:'Adani','Rubik',Arial,sans-serif;font-size:12.5px;font-weight:bold;text-align:left;color:#003b70;border-bottom:1px solid #e2e8f0;">Name</th>
+                    <th style="padding:10px 14px;font-family:'Adani','Rubik',Arial,sans-serif;font-size:12.5px;font-weight:bold;text-align:left;color:#003b70;border-bottom:1px solid #e2e8f0;">Department</th>
+                    <th style="padding:10px 14px;font-family:'Adani','Rubik',Arial,sans-serif;font-size:12.5px;font-weight:bold;text-align:left;color:#003b70;border-bottom:1px solid #e2e8f0;">Last Working Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {{ row_html }}
+                </tbody>
+              </table>
+            </div>
+            <p style="margin:20px 0 0 0;font-family:'Adani','Rubik',Arial,sans-serif;font-size:13.5px;line-height:1.6;color:#475569;">
+              {{ outro }}
+            </p>
+          </td>
+        </tr>
+
+        <!-- Simple Footer -->
+        <tr>
+          <td class="footer" bgcolor="#f8fafc" style="padding:18px 28px;background-color:#f8fafc;color:#64748b;border-top:1px solid #e2e8f0;font-family:'Adani','Rubik',Arial,sans-serif;font-size:12px;line-height:1.5;">
+            Regards,<br>
+            <b style="color:#003b70;">Team HR</b>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+</body>
+</html>
