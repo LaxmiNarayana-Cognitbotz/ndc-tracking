@@ -3,8 +3,10 @@ import datetime
 import io
 import logging
 import os
+import re
 from datetime import date
 from pathlib import Path
+from typing import List, Optional, Set, Tuple
 
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
@@ -189,10 +191,120 @@ class SharePointSyncService:
             import fastapi
             raise fastapi.HTTPException(status_code=500, detail='An internal server error occurred.')
 
+    @staticmethod
+    def _extract_person_number(name: str) -> Optional[int]:
+        """
+        Extract employee person number from folder or file name using regex.
+        Handles:
+          - '30133866'
+          - '30133866.pdf'
+          - '30133866_FNF.pdf'
+          - 'F&F_30133866.pdf'
+          - '30133866 - Statement.pdf'
+        """
+        if not name:
+            return None
+        match = re.search(r'(?:^|[^\d])(\d{6,9})(?:[^\d]|$)', name)
+        if match:
+            try:
+                return int(match.group(1))
+            except ValueError:
+                return None
+        return None
+
+    async def _resolve_fnf_folder(
+        self, client, site_id: str, drive_id: str, base_folder_path: str
+    ) -> Tuple[str, str]:
+        """
+        Tries candidate folder names ('F&F_Documents', 'F&F Documents', 'FNF_Documents', 'F&F')
+        and returns the first one that exists on SharePoint: (clean_path, encoded_path).
+        """
+        candidates = ["F&F_Documents", "F&F Documents", "FNF_Documents", "F&F"]
+        token = await self.sharepoint.get_access_token()
+        headers = {"Authorization": f"Bearer {token}"}
+
+        for candidate in candidates:
+            path = f"{base_folder_path}/{candidate}" if base_folder_path else candidate
+            clean_path = "/".join([p for p in path.split("/") if p])
+            encoded_path = self.sharepoint._encode_path_segments(clean_path)
+            url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drives/{drive_id}/root:/{encoded_path}"
+
+            try:
+                resp = await client.get(url, headers=headers)
+                if resp.status_code == 200:
+                    logger.info(f"Resolved SharePoint F&F directory: '{clean_path}'")
+                    return clean_path, encoded_path
+            except Exception as e:
+                logger.warning(f"Error checking candidate folder '{clean_path}': {e}")
+
+        default_path = f"{base_folder_path}/F&F_Documents" if base_folder_path else "F&F_Documents"
+        clean_default = "/".join([p for p in default_path.split("/") if p])
+        return clean_default, self.sharepoint._encode_path_segments(clean_default)
+
+    async def _fetch_all_fnf_person_numbers(
+        self, client, site_id: str, drive_id: str, encoded_path: str, clean_path: str
+    ) -> Tuple[Set[int], List[str]]:
+        """
+        Scans all children in the SharePoint F&F folder across ALL pages using @odata.nextLink.
+        Uses $top=500 for optimal batching.
+        Extracts employee person numbers using regex matching.
+        """
+        person_numbers: Set[int] = set()
+        errors: List[str] = []
+        token = await self.sharepoint.get_access_token()
+        headers = {"Authorization": f"Bearer {token}"}
+
+        url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drives/{drive_id}/root:/{encoded_path}:/children?$top=500"
+        page_num = 1
+
+        while url:
+            try:
+                logger.info(f"Listing SharePoint F&F items (page {page_num}): {clean_path}")
+                response = await client.get(url, headers=headers)
+
+                # Token expired during pagination? Refresh and retry
+                if response.status_code == 401:
+                    logger.info("Token expired during pagination, refreshing...")
+                    token = await self.sharepoint.get_access_token(force_refresh=True)
+                    headers = {"Authorization": f"Bearer {token}"}
+                    response = await client.get(url, headers=headers)
+
+                if response.status_code == 404:
+                    err_msg = f"SharePoint folder not found: '{clean_path}' (404)"
+                    logger.warning(err_msg)
+                    errors.append(err_msg)
+                    break
+
+                if response.status_code != 200:
+                    err_msg = f"Failed to list page {page_num} of '{clean_path}': {response.status_code} - {response.text}"
+                    logger.error(err_msg)
+                    errors.append(err_msg)
+                    break
+
+                data = response.json()
+                items = data.get("value", [])
+                for item in items:
+                    name = item.get("name", "")
+                    pn = self._extract_person_number(name)
+                    if pn is not None:
+                        person_numbers.add(pn)
+
+                url = data.get("@odata.nextLink")
+                page_num += 1
+
+            except Exception as e:
+                err_msg = f"Error during SharePoint F&F listing page {page_num}: {e}"
+                logger.exception(err_msg)
+                errors.append(err_msg)
+                break
+
+        return person_numbers, errors
+
     async def sync_fnf_completed_records(self, db: AsyncSession) -> dict:
         """
-        Scan SharePoint F&F Documents folder for employee directories (named with person numbers),
-        and update their is_fnf_completed status in the database to True.
+        Scan SharePoint F&F Documents folder across all pages, extract employee person numbers,
+        and update matching records in the database to is_fnf_completed = True and fnf_document_count = 1.
+        Does NOT destructively revert previously completed records.
         """
         try:
             results = {
@@ -201,112 +313,66 @@ class SharePointSyncService:
                 "records_updated": 0,
                 "errors": []
             }
-        
-            async with get_httpx_client(timeout=60.0) as client:
-                try:
-                    # 1. Resolve site ID
-                    site_id = await self.sharepoint.get_site_id(client)
-                
-                    # 2. Get base drive and target folder details
-                    drive_id, base_folder_path = await self.sharepoint.get_drive_details(client, site_id)
-                
-                    # 3. Construct the F&F documents path
-                    fnf_folder = "F&F_Documents"
-                    if base_folder_path:
-                        fnf_path = f"{base_folder_path}/{fnf_folder}"
-                    else:
-                        fnf_path = fnf_folder
-                
-                    clean_path = "/".join([p for p in fnf_path.split("/") if p])
-                    encoded_path = self.sharepoint._encode_path_segments(clean_path)
-                
-                    # 4. List children in the F&F folder
-                    url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drives/{drive_id}/root:/{encoded_path}:/children"
-                    logger.info(f"Checking SharePoint F&F directory: {clean_path}")
-                
-                    token = await self.sharepoint.get_access_token()
-                    headers = {"Authorization": f"Bearer {token}"}
-                
-                    response = await client.get(url, headers=headers)
-                    if response.status_code != 200:
-                        err_msg = f"Failed to list SharePoint F&F folder '{clean_path}': {response.status_code} - {response.text}"
-                        logger.error(err_msg)
-                        results["status"] = "failed"
-                        results["errors"].append(err_msg)
-                        return results
 
-                    children = response.json().get("value", [])
-                
-                    # 5. Extract employee person numbers (numeric folder names or files)
-                    person_numbers = []
-                    for item in children:
-                        name = item.get("name", "")
-                        base_name = name.split(".")[0]
-                        if base_name.isdigit():
-                            person_numbers.append(int(base_name))
-                
+            async with get_httpx_client(timeout=120.0) as client:
+                try:
+                    site_id = await self.sharepoint.get_site_id(client)
+                    drive_id, base_folder_path = await self.sharepoint.get_drive_details(client, site_id)
+
+                    clean_path, encoded_path = await self._resolve_fnf_folder(client, site_id, drive_id, base_folder_path)
+                    person_numbers, errors = await self._fetch_all_fnf_person_numbers(
+                        client, site_id, drive_id, encoded_path, clean_path
+                    )
+
+                    if errors:
+                        results["errors"].extend(errors)
+                        if not person_numbers:
+                            results["status"] = "failed"
+                            return results
+
                     results["folders_found"] = len(person_numbers)
-                    logger.info(f"Found {len(person_numbers)} F&F folder(s)/file(s) in SharePoint.")
-                
-                    # 6. Query and update records
-                    # Update matching records to True
+                    logger.info(f"F&F Completed Sync: Found {len(person_numbers)} unique person numbers across SharePoint pages.")
+
                     completed_count = 0
                     if person_numbers:
-                        stmt = select(NdcRecord).where(
-                            NdcRecord.person_number.in_(person_numbers),
-                            NdcRecord.is_fnf_completed == False
-                        )
-                        db_result = await db.execute(stmt)
-                        records_to_update = db_result.scalars().all()
-                    
+                        person_list = list(person_numbers)
                         today = date.today()
-                        for record in records_to_update:
-                            record.is_fnf_completed = True
-                            if not record.fnf_completed_date:
-                                record.fnf_completed_date = today
-                            if record.is_fnf_revision or (record.fnf_revision_start_date and not record.fnf_revision_completed_date):
-                                record.fnf_revision_completed_date = today
-                            record.is_fnf_revision = False
-                        
-                            # Also propagate dates
-                            await CommonService._propagate_department_dates(record.id, today, db)
-                            completed_count += 1
-                
-                    # Update non-matching records to False
-                    if person_numbers:
-                        stmt_revert = select(NdcRecord).where(
-                            NdcRecord.person_number.notin_(person_numbers),
-                            NdcRecord.is_fnf_completed == True
-                        )
-                    else:
-                        stmt_revert = select(NdcRecord).where(
-                            NdcRecord.is_fnf_completed == True
-                        )
-                    db_result_revert = await db.execute(stmt_revert)
-                    records_to_revert = db_result_revert.scalars().all()
-                
-                    reverted_count = 0
-                    for record in records_to_revert:
-                        # Never revert a record that has been manually closed — is_fnf_closed is permanent
-                        if record.is_fnf_closed:
-                            continue
-                        record.is_fnf_completed = False
-                        record.fnf_completed_date = None
-                        reverted_count += 1
-                    
-                    if completed_count > 0 or reverted_count > 0:
-                        await db.commit()
-                        logger.info(f"F&F Completed Sync: Completed {completed_count}, Reverted {reverted_count} records.")
-                
+                        chunk_size = 1000
+
+                        for i in range(0, len(person_list), chunk_size):
+                            chunk = person_list[i : i + chunk_size]
+                            stmt = select(NdcRecord).where(
+                                NdcRecord.person_number.in_(chunk),
+                                NdcRecord.is_fnf_completed == False,
+                            )
+                            db_result = await db.execute(stmt)
+                            records_to_update = db_result.scalars().all()
+
+                            for record in records_to_update:
+                                record.is_fnf_completed = True
+                                record.fnf_document_count = max(record.fnf_document_count or 0, 1)
+                                if not record.fnf_completed_date:
+                                    record.fnf_completed_date = today
+                                if record.is_fnf_revision or (record.fnf_revision_start_date and not record.fnf_revision_completed_date):
+                                    record.fnf_revision_completed_date = today
+                                record.is_fnf_revision = False
+
+                                # Also propagate department dates
+                                await CommonService._propagate_department_dates(record.id, today, db)
+                                completed_count += 1
+
+                        if completed_count > 0:
+                            await db.commit()
+                            logger.info(f"F&F Completed Sync: Marked {completed_count} record(s) as Completed.")
+
                     results["records_updated"] = completed_count
-                    results["records_reverted"] = reverted_count
-                        
+
                 except Exception as e:
                     err_msg = f"Failed to execute SharePoint F&F Completed Sync: {str(e)}"
                     logger.exception(err_msg)
                     results["status"] = "failed"
                     results["errors"].append(err_msg)
-                
+
             return results
         except HTTPException:
             raise
@@ -317,9 +383,10 @@ class SharePointSyncService:
 
     async def generate_and_upload_fnf_closed_report(self, db: AsyncSession) -> dict:
         """
-        READ-ONLY: Queries person numbers where ndc_stage='NDC Completed' and is_fnf_closed=False,
+        READ-ONLY: Queries person numbers where ndc_stage='NDC Completed', is_fnf_closed=False,
+        and is_fnf_completed=False (excludes already completed/downloaded records),
         generates an Excel with just those person numbers,
-        and uploads it to SharePoint folder 'fnf_closed_report'.
+        and uploads it to SharePoint folder 'F&F_Active_Report'.
         Does NOT write, update, or delete anything in the database.
         """
         try:
@@ -331,16 +398,17 @@ class SharePointSyncService:
             }
 
             try:
-                # ── 1. Read-only SELECT — only person numbers where ndc_stage='NDC Completed' and is_fnf_closed=False ─
+                # ── 1. Read-only SELECT — only person numbers where ndc_stage='NDC Completed', is_fnf_closed=False, and is_fnf_completed=False ─
 
                 stmt = select(NdcRecord.person_number).where(
                     NdcRecord.ndc_stage == "NDC Completed",
-                    NdcRecord.is_fnf_closed == False
+                    NdcRecord.is_fnf_closed == False,
+                    NdcRecord.is_fnf_completed == False,
                 ).order_by(NdcRecord.person_number)
                 db_result = await db.execute(stmt)
                 person_numbers = [row[0] for row in db_result.fetchall()]
                 results["records_exported"] = len(person_numbers)
-                logger.info(f"FNF Report: Found {len(person_numbers)} record(s) with ndc_stage='NDC Completed' and is_fnf_closed=False.")
+                logger.info(f"FNF Report: Found {len(person_numbers)} record(s) with ndc_stage='NDC Completed', is_fnf_closed=False, and is_fnf_completed=False.")
 
                 # ── 2. Build Excel workbook (Person Number only) ─────────────────────
                 HEADER_FONT = Font(bold=True, color="FFFFFF", size=11)
@@ -476,8 +544,8 @@ class SharePointSyncService:
 
     async def sync_fnf_document_presence(self, db: AsyncSession) -> dict:
         """
-        Scans the SharePoint F&F_Documents folder for employee subfolders or files.
-        Updates the 'fnf_document_count' field in the database.
+        Scans SharePoint F&F Documents folder across all pages and updates
+        the 'fnf_document_count' field in the database.
         """
         try:
             results = {
@@ -491,74 +559,42 @@ class SharePointSyncService:
                 try:
                     site_id = await self.sharepoint.get_site_id(client)
                     drive_id, base_folder_path = await self.sharepoint.get_drive_details(client, site_id)
-                    token = await self.sharepoint.get_access_token()
-                    headers = {"Authorization": f"Bearer {token}"}
 
-                    # Construct F&F_Documents path
-                    if base_folder_path:
-                        fnf_path = f"{base_folder_path}/F&F_Documents"
-                    else:
-                        fnf_path = "F&F_Documents"
+                    clean_path, encoded_path = await self._resolve_fnf_folder(client, site_id, drive_id, base_folder_path)
+                    person_numbers, errors = await self._fetch_all_fnf_person_numbers(
+                        client, site_id, drive_id, encoded_path, clean_path
+                    )
 
-                    clean_path = "/".join([p for p in fnf_path.split("/") if p])
-                    encoded_path = self.sharepoint._encode_path_segments(clean_path)
-
-                    person_numbers = set()
-                    url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drives/{drive_id}/root:/{encoded_path}:/children"
-
-                    while url:
-                        logger.info(f"Sync F&F Documents: Querying {url}")
-                        response = await client.get(url, headers=headers)
-                        if response.status_code == 200:
-                            data = response.json()
-                            children = data.get("value", [])
-                            for item in children:
-                                name = item.get("name", "")
-                                # If it's a file like 30133866.pdf, strip extension
-                                if "file" in item:
-                                    pn = name.rsplit(".", 1)[0]
-                                else:
-                                    pn = name
-                                try:
-                                    person_numbers.add(int(pn))
-                                except ValueError:
-                                    logger.warning(f"Sync F&F Documents: Ignoring invalid folder/file name '{name}'")
-
-                            url = data.get("@odata.nextLink")
-                        elif response.status_code == 404:
-                            logger.warning(f"Sync F&F Documents: Directory '{clean_path}' not found in SharePoint.")
-                            break
-                        else:
-                            err_msg = f"Sync F&F Documents API error {response.status_code}: {response.text}"
-                            logger.error(err_msg)
-                            results["status"] = "failed"
-                            results["errors"].append(err_msg)
-                            break
+                    if errors:
+                        results["errors"].extend(errors)
 
                     results["folders_found"] = len(person_numbers)
                     logger.info(f"Sync F&F Documents: Found {len(person_numbers)} unique person numbers.")
 
-                    # Update the database
+                    # Update database for found person numbers
                     if person_numbers:
-                        # Set fnf_document_count = 1 for found person numbers
-                        update_stmt_1 = (
-                            update(NdcRecord)
-                            .where(NdcRecord.person_number.in_(person_numbers))
-                            .values(fnf_document_count=1)
-                        )
-                        # Set fnf_document_count = 0 for all others
-                        update_stmt_0 = (
-                            update(NdcRecord)
-                            .where(NdcRecord.person_number.not_in(person_numbers))
-                            .values(fnf_document_count=0)
-                        )
-                    
-                        res_1 = await db.execute(update_stmt_1)
-                        res_0 = await db.execute(update_stmt_0)
-                        await db.commit()
-                    
-                        results["records_updated"] = res_1.rowcount + res_0.rowcount
-                        logger.info(f"Sync F&F Documents: Updated {res_1.rowcount} records to 1, and {res_0.rowcount} records to 0.")
+                        person_list = list(person_numbers)
+                        chunk_size = 1000
+                        total_updated = 0
+
+                        for i in range(0, len(person_list), chunk_size):
+                            chunk = person_list[i : i + chunk_size]
+                            stmt = (
+                                update(NdcRecord)
+                                .where(
+                                    NdcRecord.person_number.in_(chunk),
+                                    NdcRecord.fnf_document_count != 1
+                                )
+                                .values(fnf_document_count=1)
+                            )
+                            res = await db.execute(stmt)
+                            total_updated += res.rowcount
+
+                        if total_updated > 0:
+                            await db.commit()
+                            logger.info(f"Sync F&F Documents: Updated {total_updated} record(s) to fnf_document_count=1.")
+
+                        results["records_updated"] = total_updated
 
                 except Exception as e:
                     err_msg = f"Sync F&F Documents: Unexpected error — {str(e)}"

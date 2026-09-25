@@ -4,11 +4,11 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 def setup_logging():
-    """Configure server logging to write to a rotating file outside the server directory."""
+    """Configure server logging to write to a rotating file inside the server directory."""
     
-    # Define log folder
-    base_dir = Path(__file__).resolve().parent.parent.parent
-    log_dir = base_dir / "logs"
+    # Define log folder inside backend (server) directory
+    server_dir = Path(__file__).resolve().parent.parent
+    log_dir = server_dir / "logs"
     log_dir.mkdir(exist_ok=True)
     
     log_file = log_dir / "server_logs.log"
@@ -16,9 +16,16 @@ def setup_logging():
     # Write a clean startup banner to the log file
     import os
     if not os.environ.get("SERVER_BANNER_PRINTED"):
-        now_str = datetime.datetime.now().strftime("%d-%m-%y %H:%M:%S")
+        now_str = datetime.datetime.now().strftime("%d-%m-%y %I:%M:%S %p")
+        banner = (
+            f"\n┌────────────────────────────────────────────────────────┐\n"
+            f"│  NDC TRACKING API SERVER                               │\n"
+            f"│  Status  : Online                                      │\n"
+            f"│  Started : {now_str:<44}│\n"
+            f"└────────────────────────────────────────────────────────┘\n"
+        )
         with open(log_file, "a", encoding="utf-8") as f:
-            f.write(f"\n========================\nServer started at - {now_str}\n========================\n")
+            f.write(banner)
         os.environ["SERVER_BANNER_PRINTED"] = "1"
     
     # Create file handler with log rotation (max 30MB per file)
@@ -36,8 +43,8 @@ def setup_logging():
         
     file_handler.namer = custom_log_namer
     
-    # Date format: DD-MM-YY HH:MM:SS
-    file_formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%d-%m-%y %H:%M:%S")
+    # Date format: DD-MM-YY HH:MM:SS AM/PM (12-hour format)
+    file_formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%d-%m-%y %I:%M:%S %p")
     file_handler.setFormatter(file_formatter)
 
     # Set root logger to ONLY use the file handler
