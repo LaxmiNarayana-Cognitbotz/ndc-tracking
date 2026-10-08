@@ -55,6 +55,25 @@ async def download_sample():
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"An error occurred: {str(e)}")
 
 
+@router.get("/employee-email-master/export")
+async def export_employee_emails(search: str = "", db: AsyncSession = Depends(get_db)):
+    try:
+        output = await EmployeeEmailService.export_employee_emails_excel(search, db)
+        headers = {
+            "Content-Disposition": 'attachment; filename="employee_email_master.xlsx"',
+            "Access-Control-Expose-Headers": "Content-Disposition"
+        }
+        return StreamingResponse(
+            output,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers=headers
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"An error occurred: {str(e)}")
+
+
 @router.delete("/employee-email-master/{id}")
 async def delete_employee_email_configuration(id: int, db: AsyncSession = Depends(get_db)):
     try:

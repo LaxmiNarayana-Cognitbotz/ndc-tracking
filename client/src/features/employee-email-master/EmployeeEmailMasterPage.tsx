@@ -96,6 +96,9 @@ export function EmployeeEmailMasterPage() {
   const [uploading, setUploading] = useState(false);
   const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
 
+  // Export states
+  const [isExporting, setIsExporting] = useState(false);
+
   // Search Debouncing (400ms)
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -151,6 +154,34 @@ export function EmployeeEmailMasterPage() {
       })
       .catch(() => {
         toast.error("Failed to download sample Excel file.");
+      });
+  };
+
+  // Export All to Excel
+  const handleExport = () => {
+    setIsExporting(true);
+    axios.get("/api/v1/employee-email-master/export", {
+      params: {
+        search: debouncedSearch
+      },
+      responseType: "blob"
+    })
+      .then((res) => {
+        const url = window.URL.createObjectURL(new Blob([res.data]));
+        const link = document.createElement("a");
+        link.href = url;
+        link.setAttribute("download", "employee_email_master.xlsx");
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        toast.success("Employee email list exported successfully.");
+      })
+      .catch((err) => {
+        const errMsg = err.response?.data?.detail || err.message || "Failed to export employee records.";
+        toast.error(errMsg);
+      })
+      .finally(() => {
+        setIsExporting(false);
       });
   };
 
@@ -343,9 +374,23 @@ export function EmployeeEmailMasterPage() {
           <button
             onClick={handleDownloadSample}
             className="flex items-center gap-2 px-4 py-2 border border-border bg-card hover:bg-muted text-foreground text-sm font-medium rounded-[4px] transition-colors shrink-0"
+            title="Download sample Excel template"
           >
             <Download className="w-4 h-4 text-muted-foreground" />
             Download Sample Excel
+          </button>
+          <button
+            onClick={handleExport}
+            disabled={isExporting}
+            className="flex items-center gap-2 px-4 py-2 border border-border bg-card hover:bg-muted text-foreground text-sm font-medium rounded-[4px] transition-colors shrink-0 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
+            title="Export all employee email records to Excel"
+          >
+            {isExporting ? (
+              <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+            ) : (
+              <Download className="w-4 h-4 text-muted-foreground" />
+            )}
+            Export Excel
           </button>
           <button
             onClick={() => {

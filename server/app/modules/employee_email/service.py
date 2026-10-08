@@ -154,7 +154,7 @@ class EmployeeEmailService:
                     col_mapping["person_number"] = col
                 elif col_lower in ("employee name", "employee_name", "emp name", "name"):
                     col_mapping["employee_name"] = col
-                elif col_lower == "email":
+                elif col_lower in ("email", "email address", "email_address"):
                     col_mapping["email"] = col
 
             if "person_number" not in col_mapping or "employee_name" not in col_mapping or "email" not in col_mapping:
@@ -297,6 +297,57 @@ class EmployeeEmailService:
                 detail=f"Failed to generate template: {str(e)}"
             )
 
+    @staticmethod
+    async def export_employee_emails_excel(search: str, db: AsyncSession) -> io.BytesIO:
+        """Export employee email master configurations to an Excel file."""
+        try:
+            query = select(EmployeeEmailMaster)
+            if search and search.strip():
+                search_pattern = f"%{search.strip()}%"
+                query = query.where(
+                    (EmployeeEmailMaster.employee_name.ilike(search_pattern)) |
+                    (EmployeeEmailMaster.email.ilike(search_pattern)) |
+                    (func.cast(EmployeeEmailMaster.person_number, String).ilike(search_pattern))
+                )
+
+            query = query.order_by(EmployeeEmailMaster.employee_name.asc())
+
+            res = await db.execute(query)
+            records = res.scalars().all()
+
+            data = [
+                {
+                    "Person Number": r.person_number,
+                    "Employee Name": r.employee_name,
+                    "Email": r.email,
+                }
+                for r in records
+            ]
+
+            df = pd.DataFrame(data)
+            if df.empty:
+                df = pd.DataFrame(columns=["Person Number", "Employee Name", "Email"])
+
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine="openpyxl") as writer:
+                df.to_excel(writer, index=False, sheet_name="Employee Emails")
+                try:
+                    worksheet = writer.sheets["Employee Emails"]
+                    for col in worksheet.columns:
+                        max_len = max(len(str(cell.value or "")) for cell in col)
+                        col_letter = col[0].column_letter
+                        worksheet.column_dimensions[col_letter].width = max(max_len + 4, 15)
+                except Exception:
+                    pass
+
+            output.seek(0)
+            return output
+        except Exception as e:
+            logger.exception("Failed to export Employee email configurations")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to export records: {str(e)}"
+            )
 
     @staticmethod
     async def delete_employee_email(id: int, db: AsyncSession) -> bool:
